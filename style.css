@@ -1482,3 +1482,51 @@ select:focus {
 @media print {
   .chart-tap-hint, .chart-hover { display: none; }
 }
+
+/* ---------- 脫臼模式（點圖右欄關節）：綠色系，對應 DM 右欄 ---------- */
+.chart-overlay.is-joint .chart-spot {
+  outline-color: #19c3b4;
+  box-shadow: 0 0 0 9999px #0c1e2838, 0 0 14px 6px #19c3b4cc;
+  animation-name: chart-pulse-joint;
+}
+@keyframes chart-pulse-joint {
+  0%, 100% { outline-color: #19c3b4; outline-offset: 1px; }
+  50% { outline-color: #0b8a80; outline-offset: 3px; }
+}
+.chart-overlay.is-joint .chart-line-glow { stroke: #8ff0e6; }
+.chart-overlay.is-joint .chart-line-core { stroke: var(--teal); }
+.chart-overlay.is-joint .chart-dot { background: var(--teal); box-shadow: 0 0 0 3px #8ff0e6; }
+.chart-overlay.is-joint .chart-dot::after { border-color: var(--teal); }
+.chart-overlay.is-joint .chart-bubble { background: var(--teal); }
+.chart-overlay.is-joint .chart-bubble::after { border-top-color: var(--teal); }
+.chart-overlay.is-joint .chart-bubble-pay { color: var(--teal); }
+.chart-hover.is-joint { background: #19c3b433; box-shadow: 0 0 0 2px #0b8a80, 0 0 10px 2px #19c3b499; }
+.chart-callout.is-joint { border-color: var(--teal); }
+.chart-callout.is-joint .callout-main b { color: var(--teal); }
+.chart-callout.is-joint mark { color: var(--teal); background: #dff6f3; }
+.chart-callout.is-joint .callout-pay .is-total { background: #0b4f4b; }
+.callout-note {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  background: #fff7e0;
+  border-left: 4px solid #e0a800;
+  color: #5b4300;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+.chart-card figcaption .callout-dm,
+.callout-dm {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.chart-card figcaption .callout-back,
+.callout-back {
+  margin: 2px 0 0;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 700;
+}

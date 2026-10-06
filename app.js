@@ -301,10 +301,15 @@
     renderCallout(c);
   }
 
-  /* ---------------- ADH 骨折別表圖：標示目前選擇的骨折部位 ----------------
-   * 位置資料在 rates.js 的 BONE_CHART（百分比），圖片縮放時會自動對齊。
-   * 只在部位／程度／ADH 金額改變時才重畫，避免輸入其他欄位時動畫一直重播。 */
+  /* ---------------- ADH 骨折別表圖：標示目前選擇的骨折（或脫臼）部位 ----------------
+   * 位置資料在 rates.js 的 BONE_CHART／JOINT_CHART（百分比），圖片縮放時會自動對齊。
+   * 只在部位／程度／ADH 金額改變時才重畫，避免輸入其他欄位時動畫一直重播。
+   * 圖上有兩種模式：
+   *   骨折（預設）：跟著左側「骨折部位」，金額＝報價卡「骨折」那一列（ADH 骨折金＋2% 關懷金）
+   *   脫臼：點圖右欄的關節時進入；金額＝ADH 保險金額 × 脫臼別表比例（只顯示在圖上與說明卡，不影響報價卡）
+   *   點左欄骨折部位、或變更「骨折部位／骨折程度」選單，就回到骨折模式。 */
   var lastChartKey = "";
+  var chartView = { mode: "bone", jointId: null };
 
   function pctText(v) { return Number(v.toFixed(2)) + "%"; } // 例：0.75%、30%
 
@@ -314,46 +319,99 @@
     return Math.abs(inv - Math.round(inv)) < 1e-9 ? "1/" + Math.round(inv) : String(f);
   }
 
+  function findJoint(id) {
+    for (var i = 0; i < R.JOINTS.length; i++) if (R.JOINTS[i].id === id) return R.JOINTS[i];
+    return null;
+  }
+
+  // 意外傷害脫臼開放性復位術保險金 = ADH 保險金額 × 脫臼別表比例（DM 第 2 頁；無關懷金）
+  function dislocationBenefit(c, joint) {
+    return Math.round(c.effectiveAdh * 10000 * joint.pct / 100);
+  }
+
+  function currentJoint() {
+    return chartView.mode === "joint" ? findJoint(chartView.jointId) : null;
+  }
+
+  function overlayHtml(pos, label, pctHtml, smallHtml, payHtml) {
+    var b = pos.box, l = pos.line, html = "";
+    if (l) {
+      html += '<svg class="chart-lines" viewBox="0 0 100 100" preserveAspectRatio="none">' +
+        '<line class="chart-line-glow" x1="' + l[0] + '" y1="' + l[1] + '" x2="' + l[2] + '" y2="' + l[3] + '"/>' +
+        '<line class="chart-line-core" x1="' + l[0] + '" y1="' + l[1] + '" x2="' + l[2] + '" y2="' + l[3] + '"/>' +
+        "</svg>";
+    }
+    html += '<span class="chart-spot" style="left:' + b[0] + "%;top:" + b[1] + "%;width:" + b[2] + "%;height:" + b[3] + '%"></span>';
+    if (l) html += '<span class="chart-dot" style="left:' + l[2] + "%;top:" + l[3] + '%"></span>';
+    html += '<span class="chart-bubble" style="left:' + (b[0] + b[2]) + "%;top:" + b[1] + '%">' +
+      '<span class="chart-bubble-name">' + esc(label) + "</span>" +
+      "<b>" + pctHtml + "</b>" + (smallHtml || "") +
+      '<em class="chart-bubble-pay">' + payHtml + "</em></span>";
+    return html;
+  }
+
   function renderChart(c) {
-    var bone = c.bone, f = c.fracture.factor, pos = R.BONE_CHART[bone.id];
-    var key = [bone.id, state.fractureType, c.effectiveAdh, c.adhFracture].join("|");
+    var joint = currentJoint();
+    var key = joint
+      ? ["joint", joint.id, c.effectiveAdh].join("|")
+      : ["bone", c.bone.id, state.fractureType, c.effectiveAdh, c.adhFracture].join("|");
     if (key === lastChartKey) return;
     lastChartKey = key;
 
-    var eff = bone.adh * f;
     var overlay = "";
-    if (pos) {
-      var b = pos.box, l = pos.line;
-      overlay =
-        '<svg class="chart-lines" viewBox="0 0 100 100" preserveAspectRatio="none">' +
-          '<line class="chart-line-glow" x1="' + l[0] + '" y1="' + l[1] + '" x2="' + l[2] + '" y2="' + l[3] + '"/>' +
-          '<line class="chart-line-core" x1="' + l[0] + '" y1="' + l[1] + '" x2="' + l[2] + '" y2="' + l[3] + '"/>' +
-        "</svg>" +
-        '<span class="chart-spot" style="left:' + b[0] + "%;top:" + b[1] + "%;width:" + b[2] + "%;height:" + b[3] + '%"></span>' +
-        '<span class="chart-dot" style="left:' + l[2] + "%;top:" + l[3] + '%"></span>' +
-        '<span class="chart-bubble" style="left:' + (b[0] + b[2]) + "%;top:" + b[1] + '%">' +
-          '<span class="chart-bubble-name">' + esc(bone.label) + "</span>" +
-          "<b>" + bone.adh + "%</b>" +
-          (f !== 1 ? '<small>' + esc(c.fracture.label) + " " + pctText(eff) + "</small>" : "") +
+    if (joint) {
+      overlay = overlayHtml(R.JOINT_CHART[joint.id], joint.label, joint.pct + "%", "",
+        c.effectiveAdh > 0 ? "理賠 " + money.format(dislocationBenefit(c, joint)) + " 元" : "未投保 ADH");
+    } else {
+      var bone = c.bone, f = c.fracture.factor, pos = R.BONE_CHART[bone.id];
+      if (pos) {
+        overlay = overlayHtml(pos, bone.label, bone.adh + "%",
+          f !== 1 ? "<small>" + esc(c.fracture.label) + " " + pctText(bone.adh * f) + "</small>" : "",
           // 理賠金額＝報價卡「骨折」那一列的金額（ADH 骨折金＋2% 關懷金），不另外計算
-          '<em class="chart-bubble-pay">' + (c.effectiveAdh > 0
-            ? "理賠 " + money.format(c.adhFracture + c.adhCare) + " 元" : "未投保 ADH") + "</em>" +
-        "</span>";
+          c.effectiveAdh > 0 ? "理賠 " + money.format(c.adhFracture + c.adhCare) + " 元" : "未投保 ADH");
+      }
     }
     var boxes = document.querySelectorAll(".chart-overlay");
-    for (var i = 0; i < boxes.length; i++) boxes[i].innerHTML = overlay;
+    for (var i = 0; i < boxes.length; i++) {
+      boxes[i].innerHTML = overlay;
+      boxes[i].classList.toggle("is-joint", !!joint);
+    }
   }
 
   // 右側說明卡：每次都更新（含 ADM 住院日數等，數字全部取自報價卡同一份計算結果 c）
   function renderCallout(c) {
     var callout = $("chartCallout");
     if (!callout) return;
-    var bone = c.bone, f = c.fracture.factor, eff = bone.adh * f;
+    var joint = currentJoint();
     var adh = c.effectiveAdh > 0, adm = state.admDaily > 0;
     var row = function (label, value, cls) {
       return '<div class="' + (cls || "") + '"><dt>' + label + "</dt><dd>" + value + "</dd></div>";
     };
     var yuan = function (v) { return money.format(v) + " 元"; };
+    callout.classList.toggle("is-joint", !!joint);
+
+    if (joint) { // ---- 脫臼模式 ----
+      var amt = dislocationBenefit(c, joint);
+      callout.innerHTML =
+        '<span class="callout-label">目前脫臼部位</span>' +
+        '<div class="callout-main"><strong>' + esc(joint.label) + "</strong><b>" + joint.pct + "%</b></div>" +
+        "<em>脫臼開放性復位術 → 保險金額 × " + joint.pct + "%</em>" +
+        "<em>" + (adh
+          ? "ADH " + money.format(c.effectiveAdh) + " 萬 × " + joint.pct + "% → <mark>" + yuan(amt) + "</mark>"
+          : "目前未投保 ADH") + "</em>" +
+        '<dl class="callout-pay">' +
+          (adh ? row("脫臼開放性復位術保險金", yuan(amt), "is-total") : row("ADH", "未投保 ADH", "is-muted")) +
+        "</dl>" +
+        '<p class="callout-note">須經醫師診斷必須且實際施行脫臼開放性復位術；同一事故僅給付一項較高比例。脫臼不另給付 2% 關懷金。</p>' +
+        '<p class="callout-dm">DM：「意外傷害脫臼開放性復位術保險金：保險金額x脫臼別表(10%~30%)，同一意外傷害事故僅給付一次。」' +
+        "註2：「如因同一意外傷害事故致成二項以上脫臼經醫師診斷必須且實際施行二項以上之『脫臼開放性復位術』治療者，" +
+        "富邦人壽僅給付一項較高比例之意外傷害脫臼開放性復位術保險金。」詳細給付內容及條件限制，請參閱保單條款。</p>" +
+        '<p class="callout-back">此為圖上試算，未計入上方報價卡；點圖左欄骨折部位即回到骨折試算。</p>';
+      return;
+    }
+
+    // ---- 骨折模式（與報價卡相同數字）----
+    var bone = c.bone, f = c.fracture.factor, eff = bone.adh * f;
     var pay = "";
     if (adh) {
       pay += row("ADH 骨折保險金", yuan(c.adhFracture));
@@ -378,13 +436,14 @@
       '<dl class="callout-pay">' + pay + "</dl>";
   }
 
-  /* ---------------- 點圖上的骨折部位 → 直接選該部位、顯示理賠金額 ----------------
-   * 用 BONE_CHART 的百分比位置做點擊判定：點在標籤框上（或框旁幾 px 內），
-   * 或點在骨頭上的引線端點附近，就選取最近的部位。兩個部位共用同一端點時（橈骨／脛骨），
+  /* ---------------- 點圖上的部位 → 直接選取、顯示理賠金額 ----------------
+   * 用 BONE_CHART／JOINT_CHART 的百分比位置做點擊判定：點在標籤框上（或框旁幾 px 內），
+   * 或點在骨頭／關節上的引線端點附近，就選取最近的部位。兩個骨折部位共用同一端點時（橈骨／脛骨），
    * 連點會在兩者間切換。點到圖上空白處不做任何事。 */
   var coarsePointer = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
 
-  function hitBone(stage, clientX, clientY) {
+  // 回傳 { kind: "bone" | "joint", id } 或 null
+  function hitTarget(stage, clientX, clientY) {
     var r = stage.getBoundingClientRect();
     if (!r.width) return null;
     var x = clientX - r.left, y = clientY - r.top;
@@ -392,28 +451,39 @@
     // 容許誤差（px）：點在標籤／比例格外圍這個距離內也算；相鄰標籤以「最近者」為準，不會選錯
     var tolBox = coarsePointer ? 16 : 12, tolDot = coarsePointer ? 26 : 18;
     var best = null, groups = {};
-    Object.keys(R.BONE_CHART).forEach(function (id) {
-      var p = R.BONE_CHART[id], b = p.box, l = p.line;
-      var bx = b[0] / 100 * r.width, by = b[1] / 100 * r.height, bw = b[2] / 100 * r.width, bh = b[3] / 100 * r.height;
-      var dBox = Math.hypot(Math.max(bx - x, 0, x - bx - bw), Math.max(by - y, 0, y - by - bh));
-      var ex = l[2] / 100 * r.width, ey = l[3] / 100 * r.height;
-      var dDot = Math.hypot(x - ex, y - ey);
-      var key = l[2] + "," + l[3];
-      (groups[key] = groups[key] || []).push(id);
-      if (dBox <= tolBox && (!best || dBox < best.d)) best = { id: id, d: dBox, dot: null };
-      if (dDot <= tolDot && (!best || dDot < best.d)) best = { id: id, d: dDot, dot: key };
-    });
-    if (!best) return null;
-    if (best.dot) { // 共用端點：已選其中一個時，再點一次換下一個
-      var g = groups[best.dot], cur = g.indexOf(state.boneId);
-      return cur >= 0 ? g[(cur + 1) % g.length] : g[0];
+    function test(kind, table) {
+      Object.keys(table).forEach(function (id) {
+        var p = table[id], b = p.box, l = p.line;
+        var bx = b[0] / 100 * r.width, by = b[1] / 100 * r.height, bw = b[2] / 100 * r.width, bh = b[3] / 100 * r.height;
+        var dBox = Math.hypot(Math.max(bx - x, 0, x - bx - bw), Math.max(by - y, 0, y - by - bh));
+        if (dBox <= tolBox && (!best || dBox < best.d)) best = { kind: kind, id: id, d: dBox, dot: null };
+        if (!l) return; // 「其他關節」沒有引線
+        var dDot = Math.hypot(x - l[2] / 100 * r.width, y - l[3] / 100 * r.height);
+        var key = kind + ":" + l[2] + "," + l[3];
+        (groups[key] = groups[key] || []).push(id);
+        if (dDot <= tolDot && (!best || dDot < best.d)) best = { kind: kind, id: id, d: dDot, dot: key };
+      });
     }
-    return best.id;
+    test("bone", R.BONE_CHART);
+    test("joint", R.JOINT_CHART);
+    if (!best) return null;
+    if (best.dot && best.kind === "bone") { // 共用端點：已選其中一個時，再點一次換下一個
+      var g = groups[best.dot], cur = chartView.mode === "bone" ? g.indexOf(state.boneId) : -1;
+      return { kind: "bone", id: cur >= 0 ? g[(cur + 1) % g.length] : g[0] };
+    }
+    return { kind: best.kind, id: best.id };
   }
 
   function selectBone(id) {
     if (!id || !R.BONE_CHART[id]) return;
     state.boneId = id; // 與左側「骨折部位」下拉選單相同效果
+    chartView.mode = "bone";
+    render();
+  }
+
+  function selectJoint(id) {
+    if (!findJoint(id)) return;
+    chartView.mode = "joint"; chartView.jointId = id; // 只影響圖與說明卡，不改報價資料
     render();
   }
 
@@ -424,13 +494,16 @@
       hover.className = "chart-hover"; hover.hidden = true;
       stage.appendChild(hover);
       stage.addEventListener("mousemove", function (e) {
-        var id = hitBone(stage, e.clientX, e.clientY);
-        stage.classList.toggle("is-over-bone", !!id);
-        hover.hidden = !id;
-        if (!id) { stage.removeAttribute("title"); return; }
-        var b = R.BONE_CHART[id].box, bone = findBone(id);
+        var t = hitTarget(stage, e.clientX, e.clientY);
+        stage.classList.toggle("is-over-bone", !!t);
+        hover.hidden = !t;
+        if (!t) { stage.removeAttribute("title"); return; }
+        var isJoint = t.kind === "joint";
+        var b = (isJoint ? R.JOINT_CHART : R.BONE_CHART)[t.id].box;
+        var item = isJoint ? findJoint(t.id) : findBone(t.id);
+        hover.classList.toggle("is-joint", isJoint);
         hover.style.cssText = "left:" + b[0] + "%;top:" + b[1] + "%;width:" + b[2] + "%;height:" + b[3] + "%";
-        stage.title = bone.label + " " + bone.adh + "%：點一下看理賠金額";
+        stage.title = item.label + " " + (isJoint ? item.pct + "%（脫臼開放性復位術）" : item.adh + "%") + "：點一下看理賠金額";
       });
       stage.addEventListener("mouseleave", function () { hover.hidden = true; stage.classList.remove("is-over-bone"); });
     })(stages[i]);
@@ -466,28 +539,30 @@
     on("tmrAmount", "input", function (t) { state.tmrAmount = clampNum(t.value, 0, RULES.tmr.max); });
     on("admDaily", "input", function (t) { state.admDaily = clampNum(t.value, 0, RULES.adm.max); });
     on("adhAmount", "input", function (t) { state.adhAmount = clampNum(t.value, 0, compute(state).maxAdh); });
-    on("boneId", "change", function (t) { state.boneId = t.value; });
-    on("fractureType", "change", function (t) { state.fractureType = t.value; });
+    on("boneId", "change", function (t) { state.boneId = t.value; chartView.mode = "bone"; });
+    on("fractureType", "change", function (t) { state.fractureType = t.value; chartView.mode = "bone"; });
     on("hospitalDays", "input", function (t) { state.hospitalDaysInput = t.value; });
     on("hospitalDays", "blur", function () { state.hospitalDaysInput = String(compute(state).hospitalDays); });
     render();
     initChartPicker();
   }
 
-  /* ---------------- ADH 骨折別表：點圖上的部位 → 選取 ---------------- */
+  /* ---------------- ADH 骨折別表：點圖上的部位（骨折或脫臼）→ 選取 ---------------- */
   function initChartPicker() {
     var thumb = $("chartThumb");
     if (!thumb) return;
     var stage = thumb.querySelector(".chart-stage");
     initChartClicks();
     stage.addEventListener("click", function (e) {
-      var id = hitBone(stage, e.clientX, e.clientY);
-      if (id) selectBone(id); // 沒點到部位：不做任何事
+      var t = hitTarget(stage, e.clientX, e.clientY);
+      if (!t) return; // 沒點到部位：不做任何事
+      if (t.kind === "joint") selectJoint(t.id); else selectBone(t.id);
     });
   }
 
   // 對外提供計算函式（測試或日後擴充用）
-  window.QuoteCalc = { parseRocBirth: parseRocBirth, compute: compute, getState: function () { return state; } };
+  window.QuoteCalc = { parseRocBirth: parseRocBirth, compute: compute, getState: function () { return state; },
+    getChartView: function () { return { mode: chartView.mode, jointId: chartView.jointId }; } };
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
