@@ -1600,3 +1600,5 @@ select:focus {
 @media (width<=720px) {
   .case-pay b { font-size: 24px; }
 }
+.case-premium .case-prem-row{display:block;margin-top:2px}
+.case-premium small{display:block}

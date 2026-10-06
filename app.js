@@ -539,10 +539,14 @@
       '<p class="case-applied" id="caseApplied" hidden></p>';
     var prem = $("casePremium"), P = R.CASE_PREMIUM;
     if (prem && P) {
-      var rate = R.ADH_RATES.age16to44[P.occupation - 1];
-      prem.innerHTML = '骨折險 ADH 保額 ' + P.adhAmount + ' 萬，年保費 <b>' + money.format(rate * P.adhAmount) + ' 元</b>' +
-        '，月繳 <b>' + money.format(Math.round(rate * P.adhAmount * R.PAY_MODES.month.factor)) + ' 元</b>' +
-        '<small>（' + esc(P.ageBand) + '、職業第 ' + P.occupation + ' 類；月繳＝年繳費率 × 0.088）</small>';
+      var bands = [["14 歲（含）以下", R.ADH_RATES.child], ["16～44 歲", R.ADH_RATES.age16to44]];
+      prem.innerHTML = '骨折險 ADH 保額 ' + P.adhAmount + ' 萬保費（職業第 ' + P.occupation + ' 類）' +
+        bands.map(function (b) {
+          var yr = b[1][P.occupation - 1] * P.adhAmount;
+          return '<span class="case-prem-row">' + b[0] + '：年繳 <b>' + money.format(yr) + ' 元</b>，月繳 <b>' +
+            money.format(Math.round(yr * R.PAY_MODES.month.factor)) + ' 元</b></span>';
+        }).join("") +
+        '<small>月繳＝年繳費率 × 0.088</small>';
     }
   }
 

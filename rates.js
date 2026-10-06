@@ -210,7 +210,7 @@ window.QUOTE_RATES = {
     },
   ],
   /* 簡報：「ADH 保額 100 萬 年保費 = 5,800 元（16～44 歲）」＝ ADH_RATES.age16to44 職業第 1 類 58 元/萬 × 100（已核對一致） */
-  CASE_PREMIUM: { adhAmount: 100, ageBand: "16～44 歲", occupation: 1 },
+  CASE_PREMIUM: { adhAmount: 100, occupation: 1 },  // 顯示 14 歲(含)以下 與 16～44 歲 兩列
 
   /* ---------- 畫面預設值（開啟網頁時的示範資料） ---------- */
   DEFAULTS: {
