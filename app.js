@@ -540,7 +540,8 @@
     if (prem && P) {
       var rate = R.ADH_RATES.age16to44[P.occupation - 1];
       prem.innerHTML = '骨折險 ADH 保額 ' + P.adhAmount + ' 萬，年保費 <b>' + money.format(rate * P.adhAmount) + ' 元</b>' +
-        '<small>（' + esc(P.ageBand) + '、職業第 ' + P.occupation + ' 類、年繳）</small>';
+        '，月繳 <b>' + money.format(Math.round(rate * P.adhAmount * R.PAY_MODES.month.factor)) + ' 元</b>' +
+        '<small>（' + esc(P.ageBand) + '、職業第 ' + P.occupation + ' 類；月繳＝年繳費率 × 0.088）</small>';
     }
   }
 
