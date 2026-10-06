@@ -1683,8 +1683,8 @@ select:focus {
 }
 .pill-name small {
   color: #5d6468;
-  font-size: max(6.5px, 1.55cqw);
-  font-weight: 600;
+  font-size: max(5.5px, 1.25cqw);
+  font-weight: 500;
   letter-spacing: 0;
 }
 .pill-pct {
@@ -1752,3 +1752,38 @@ select:focus {
 .chart-bubble.is-left { transform: translate(0, calc(-100% - 10px)); }
 .chart-bubble.is-left.is-below { transform: translate(0, 10px); }
 .chart-bubble.is-left::after { right: auto; left: 0.5em; }
+
+/* ---------- 分類標題（同 DM）：左藍＝骨折、右綠＝脫臼；分界＝骨頭人中線（--chart-split，由 app.js 依 CHART_FIGURE 設定） ---------- */
+.chart-thumb { --chart-split: 57.3%; }
+.chart-head {
+  display: grid;
+  grid-template-columns: var(--chart-split) 1fr;
+  container-type: inline-size;
+  border-bottom: 1px solid #fff;
+}
+.chart-head span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 0.5em 0.5em;
+  color: #fff;
+  font-size: clamp(9px, 2.05cqw, 14px);
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+  text-align: center;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.chart-head-bone { background: #4089b1; }
+.chart-head-joint { background: #439494; border-left: 2px solid #fff; }
+/* 兩側中間的細虛線（在骨頭人後面，骨頭人圖片為透明背景） */
+.chart-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--chart-split);
+  border-left: 1px dashed #9db7c4;
+  pointer-events: none;
+}

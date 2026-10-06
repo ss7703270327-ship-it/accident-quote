@@ -2,23 +2,23 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
-  <!-- ===== 版本號（快取更新）VERSION = 20261006-1925 =====
-       更新網站檔案後，把本檔所有「?v=20261006-1925」一起換成新的版本號（例：20261007-0900），
+  <!-- ===== 版本號（快取更新）VERSION = 20261006-1945 =====
+       更新網站檔案後，把本檔所有「?v=20261006-1945」一起換成新的版本號（例：20261007-0900），
        使用者的瀏覽器就會重新下載 style.css／app.js／rates.js／圖片，不會看到舊版。
-       一行指令：sed -i 's/20261006-1925/新版本號/g' index.html -->
+       一行指令：sed -i 's/20261006-1945/新版本號/g' index.html -->
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>意外險保障｜即時報價系統</title>
   <meta name="description" content="OLA6、ADG、TMR、ADM、ADH 保費與骨折給付情境試算。" />
-  <link rel="icon" type="image/png" href="assets/favicon.png?v=20261006-1925" />
-  <link rel="apple-touch-icon" href="assets/favicon.png?v=20261006-1925" />
-  <link rel="stylesheet" href="style.css?v=20261006-1925" />
+  <link rel="icon" type="image/png" href="assets/favicon.png?v=20261006-1945" />
+  <link rel="apple-touch-icon" href="assets/favicon.png?v=20261006-1945" />
+  <link rel="stylesheet" href="style.css?v=20261006-1945" />
 </head>
 <body>
 <main class="app-shell">
   <header class="topbar">
     <!-- 品牌列：大心 logo＋標語＋標題（深藍底、金色 logo） -->
     <div class="brand">
-      <img class="brand-logo" src="assets/logo.png?v=20261006-1925" alt="大心" width="34" height="48" />
+      <img class="brand-logo" src="assets/logo.png?v=20261006-1945" alt="大心" width="34" height="48" />
       <div class="brand-text">
         <span class="eyebrow">意外保障提案工具</span>
         <span class="brand-slogan">台南最大心，服務最用心</span>
@@ -147,8 +147,14 @@
            依「骨折部位」自動標示並顯示比例與理賠金額；點左欄骨折或右欄脫臼部位（標籤或骨頭上的圓點）可直接選取 -->
       <figure class="chart-card">
         <div class="chart-thumb" id="chartThumb">
+          <!-- 分類標題（同 DM）：左＝骨折、右＝脫臼；分界對齊骨頭人中線（rates.js CHART_FIGURE 的中心） -->
+          <div class="chart-head" aria-hidden="true">
+            <span class="chart-head-bone">意外傷害骨折保險金給付比例</span>
+            <span class="chart-head-joint">意外傷害脫臼開放性復位術保險金給付比例</span>
+          </div>
           <span class="chart-stage">
-            <img src="assets/cute-skeleton.webp?v=20261006-1925" width="866" height="1680"
+            <span class="chart-divider" aria-hidden="true"></span>
+            <img src="assets/cute-skeleton.webp?v=20261006-1945" width="866" height="1680"
                  alt="Q 版骨頭人：左側為骨折部位、右側為脫臼部位的給付比例標籤" />
             <span class="chart-labels" aria-hidden="true"></span>
             <span class="chart-overlay" aria-hidden="true"></span>
@@ -170,7 +176,7 @@
 </main>
 
 <!-- 載入順序：先費率資料，再主程式 -->
-<script src="rates.js?v=20261006-1925"></script>
-<script src="app.js?v=20261006-1925"></script>
+<script src="rates.js?v=20261006-1945"></script>
+<script src="app.js?v=20261006-1945"></script>
 </body>
 </html>

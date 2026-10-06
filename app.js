@@ -385,6 +385,10 @@
       if (F) {
         st.style.aspectRatio = "100 / " + F.aspect;
         if (img) img.style.cssText = "left:" + F.left + "%;top:" + F.top + "%;width:" + F.width + "%";
+        // 分類標題的左右分界與中間虛線：對齊骨頭人中線
+        var mid = Math.round((F.left + F.width / 2) * 100) / 100;
+        var thumb = st.parentNode;
+        if (thumb && thumb.style) thumb.style.setProperty("--chart-split", mid + "%");
       }
       if (layer) layer.innerHTML = html;
     }
