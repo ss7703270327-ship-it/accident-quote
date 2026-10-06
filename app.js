@@ -509,6 +509,79 @@
     })(stages[i]);
   }
 
+  /* ---------------- 左欄「案例分享」：大心團隊真實理賠（資料：rates.js 的 CASES） ---------------- */
+  var activeCase = 0;
+
+  function renderCaseShare() {
+    var cases = R.CASES || [], tabs = $("caseTabs"), body = $("caseBody");
+    if (!tabs || !body || !cases.length) return;
+    tabs.innerHTML = cases.map(function (k, i) {
+      return '<button type="button" role="tab" class="case-tab' + (i === activeCase ? " is-active" : "") + '" aria-selected="' + (i === activeCase) +
+        '" data-case="' + i + '">案例' + k.no + '<small>' + esc(k.title) + '</small></button>';
+    }).join("");
+    var k = cases[activeCase];
+    var existingSum = k.existing.reduce(function (a, e) { return a + e[1]; }, 0);
+    body.innerHTML =
+      '<div class="case-title"><span class="case-no">案例' + k.no + '</span><strong>' + esc(k.title) + '</strong></div>' +
+      '<dl class="case-facts">' +
+        '<div><dt>部位</dt><dd>' + esc(k.part) + '</dd></div>' +
+        '<div><dt>骨折程度</dt><dd>' + esc(k.fracture) + '</dd></div>' +
+        '<div><dt>收據總費用</dt><dd>' + money.format(k.receipts) + ' 元' + (k.receiptsNote ? '<small>（' + esc(k.receiptsNote) + '）</small>' : "") + '</dd></div>' +
+      '</dl>' +
+      '<p class="case-calc">' + esc(k.calc) + ' = <b>' + money.format(k.claim) + ' 元</b></p>' +
+      '<div class="case-pay"><span>ADH 骨力勇 保額 ' + k.adhAmount + ' 萬 理賠</span><b>' + money.format(k.claim) + '</b><em>元</em></div>' +
+      (k.flag ? '<p class="case-flag">ⓘ ' + esc(k.flag) + '</p>' : "") +
+      '<div class="case-total"><p>如果有加骨折險，總計理賠就會來到 <b>' + money.format(k.grandTotal) + ' 元</b></p>' +
+        '<small>＝ ADH ' + money.format(k.claim) + ' ＋ 原有保單理賠 ' + money.format(existingSum) + '（' +
+        k.existing.map(function (e) { return esc(e[0]) + ' ' + money.format(e[1]); }).join("＋") + '）</small></div>' +
+      '<button type="button" class="case-apply" data-apply="' + activeCase + '">套用此案例試算</button>' +
+      '<p class="case-applied" id="caseApplied" hidden></p>';
+    var prem = $("casePremium"), P = R.CASE_PREMIUM;
+    if (prem && P) {
+      var rate = R.ADH_RATES.age16to44[P.occupation - 1];
+      prem.innerHTML = '骨折險 ADH 保額 ' + P.adhAmount + ' 萬，年保費 <b>' + money.format(rate * P.adhAmount) + ' 元</b>' +
+        '<small>（' + esc(P.ageBand) + '、職業第 ' + P.occupation + ' 類、年繳）</small>';
+    }
+  }
+
+  function applyCase(i) {
+    var k = (R.CASES || [])[i];
+    if (!k) return;
+    var notes = [];
+    // ADH 上限 = min(200 萬, OLA6 × 5)（未勾已有主約時）；不夠時把 OLA6 調到剛好夠的保額
+    if (!state.hasExistingMain && state.olaAmount * RULES.adh.mainMultiple < k.adhAmount) {
+      state.olaAmount = Math.max(RULES.ola6.min, Math.ceil(k.adhAmount / RULES.adh.mainMultiple));
+      notes.push("OLA6 壽險保額已調為 " + state.olaAmount + " 萬（ADH " + k.adhAmount + " 萬需主約 ≥ " + state.olaAmount + " 萬）");
+    }
+    state.adhAmount = k.adhAmount;
+    state.boneId = k.boneId;
+    state.fractureType = k.fractureType;
+    chartView.mode = "bone";
+    render();
+    var c = compute(state), got = c.adhFracture + c.adhCare;
+    var msg = "已套用案例" + k.no + "：ADH " + k.adhAmount + " 萬、" + findBone(k.boneId).label + "、" + R.FRACTURE_TYPES[k.fractureType].label +
+      " → 骨折理賠 " + money.format(got) + " 元";
+    var out = $("caseApplied");
+    if (out) { out.textContent = msg + (notes.length ? "；" + notes.join("；") : "") + "。"; out.hidden = false; }
+    var card = $("quoteCard");
+    if (card && card.scrollIntoView) { // 報價卡不在畫面內（例如手機版在下方）→ 捲過去看結果
+      var r = card.getBoundingClientRect();
+      if (r.top < 0 || r.top > window.innerHeight - 120) card.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  function initCaseShare() {
+    var box = $("caseShare");
+    if (!box) return;
+    renderCaseShare();
+    box.addEventListener("click", function (e) {
+      var tab = e.target.closest ? e.target.closest("[data-case]") : null;
+      if (tab) { activeCase = Number(tab.getAttribute("data-case")); renderCaseShare(); return; }
+      var btn = e.target.closest ? e.target.closest("[data-apply]") : null;
+      if (btn) applyCase(Number(btn.getAttribute("data-apply")));
+    });
+  }
+
   /* ---------------- 事件綁定 ---------------- */
   function clampNum(v, min, max) { return Math.min(max, Math.max(min, Number(v))); }
 
@@ -545,6 +618,7 @@
     on("hospitalDays", "blur", function () { state.hospitalDaysInput = String(compute(state).hospitalDays); });
     render();
     initChartPicker();
+    initCaseShare();
   }
 
   /* ---------------- ADH 骨折別表：點圖上的部位（骨折或脫臼）→ 選取 ---------------- */
@@ -562,7 +636,8 @@
 
   // 對外提供計算函式（測試或日後擴充用）
   window.QuoteCalc = { parseRocBirth: parseRocBirth, compute: compute, getState: function () { return state; },
-    getChartView: function () { return { mode: chartView.mode, jointId: chartView.jointId }; } };
+    getChartView: function () { return { mode: chartView.mode, jointId: chartView.jointId }; },
+    applyCase: applyCase };
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();

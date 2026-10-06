@@ -171,6 +171,42 @@ window.QUOTE_RATES = {
     disabilityMinRatio: 0.05,   // 意外失能最低給付比例 5%（最高 100%）
   },
 
+  /* ---------- 案例分享（左欄「案例分享」卡） ----------
+   * 來源：「骨折理賠案例分享 202509～202601 更新」TN826 大心團隊 林秋慧 業務經理。
+   * 金額一律照簡報原文；個資（姓名、病歷、診斷書、收據影像、理賠號碼等）一概不放。
+   * 「套用此案例試算」會把 ADH 設為 adhAmount 萬、骨折部位 boneId、骨折程度 fractureType，
+   *  報價卡第 6 列算出來應等於 claim（測試會核對）。
+   * existing = 原有保單（OMR 意外傷害醫療、AHI 意外傷害醫療住院）理賠明細，加上 ADH 即為 grandTotal。 */
+  CASES: [
+    {
+      no: 1, title: "右尺骨骨折", part: "尺骨 30%（橈骨或尺骨）", fracture: "不完全骨折（× 1/2）", receipts: 8620,
+      receiptsNote: "含護具收據",
+      boneId: "radius", fractureType: "incomplete", adhAmount: 100,
+      calc: "100 萬 × 30% × 1/2 = 150,000 元，再加 2% 關懷金 3,000 元",
+      claim: 153000, grandTotal: 175370,
+      existing: [ ["OMR 意外傷害醫療", 8370], ["AHI 意外住院醫療 500 元 × 28 天", 14000] ],
+    },
+    {
+      no: 2, title: "左手指骨折", part: "指骨 3%", fracture: "完全骨折（不打折）", receipts: 21910,
+      receiptsNote: "含手指護木",
+      boneId: "finger", fractureType: "complete", adhAmount: 100,
+      calc: "100 萬 × 3% = 30,000 元，再加 2% 關懷金 600 元",
+      claim: 30600, grandTotal: 66510,
+      existing: [ ["OMR 意外傷害醫療", 21910], ["AHI 意外住院醫療 1,000 元 × 14 天", 14000] ],
+    },
+    {
+      no: 3, title: "左手腕骨折", part: "橈骨 30%（橈骨或尺骨）", fracture: "完全骨折（不打折）", receipts: 9800,
+      receiptsNote: "",
+      boneId: "radius", fractureType: "complete", adhAmount: 100,
+      calc: "100 萬 × 30% = 300,000 元，再加 2% 關懷金 6,000 元",
+      claim: 306000, grandTotal: 343750,
+      existing: [ ["OMR 意外傷害醫療", 9750], ["AHI 意外住院醫療 1,000 元 × 28 天", 28000] ],
+      flag: "簡報註記：醫生診斷書為「骨裂」，但此案例以「完全骨折」計算；此處照原案例數字呈現。若為骨裂，依條款為完全骨折給付的 1/4，實際以富邦人壽審核為準。",
+    },
+  ],
+  /* 簡報：「ADH 保額 100 萬 年保費 = 5,800 元（16～44 歲）」＝ ADH_RATES.age16to44 職業第 1 類 58 元/萬 × 100（已核對一致） */
+  CASE_PREMIUM: { adhAmount: 100, ageBand: "16～44 歲", occupation: 1 },
+
   /* ---------- 畫面預設值（開啟網頁時的示範資料） ---------- */
   DEFAULTS: {
     name: "示範客戶", rocBirth: "700101", gender: "female", occupation: 1, payMode: "annual",

@@ -1530,3 +1530,73 @@ select:focus {
   font-size: 13px;
   font-weight: 700;
 }
+
+/* ===== 左欄「案例分享」卡（純文字；資料在 rates.js CASES） ===== */
+.case-share {
+  --case-tone: #b8892b;
+  border: 1px solid #d9cba8;
+  border-top: 3px solid var(--case-tone);
+  background: #fffaf0;
+  margin-top: 6px;
+  padding: 7px 9px 8px;
+}
+.case-share-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.case-share-head h2 {
+  margin: 0; padding: 3px 7px; color: #fff; background: #1c3541;
+  font-size: 14px; font-weight: 900; letter-spacing: 0.06em; border-left: 4px solid var(--case-tone);
+}
+.case-share-head span { color: var(--muted); font-size: 12px; font-weight: 700; }
+.case-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 6px; }
+.case-tab {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  min-height: 40px; padding: 4px 2px; cursor: pointer;
+  border: 1px solid #d9cba8; background: #fff; color: var(--ink);
+  font: inherit; font-size: 13px; font-weight: 900; line-height: 1.15;
+}
+.case-tab small { color: var(--muted); font-size: 11px; font-weight: 700; }
+.case-tab:hover { border-color: var(--case-tone); }
+.case-tab.is-active { background: #1c3541; border-color: #1c3541; color: #f4c658; }
+.case-tab.is-active small { color: #dce9e8; }
+.case-tab:focus-visible, .case-apply:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.case-body { background: #fff; border: 1px solid #e6dcc4; padding: 7px 8px; }
+.case-title { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+.case-no { color: #fff; background: var(--case-tone); padding: 2px 6px; font-size: 12px; font-weight: 900; }
+.case-title strong { font-size: 15px; }
+.case-facts { margin: 0 0 5px; display: grid; gap: 2px; }
+.case-facts div { display: grid; grid-template-columns: 76px 1fr; gap: 6px; font-size: 13px; line-height: 1.35; }
+.case-facts dt { color: var(--muted); font-weight: 700; }
+.case-facts dd { margin: 0; font-weight: 700; }
+.case-facts dd small { color: var(--muted); font-weight: 500; }
+.case-calc {
+  margin: 0 0 5px; padding: 4px 6px; background: #f3f6f5; border-left: 3px solid var(--teal);
+  font-size: 12.5px; line-height: 1.45; color: var(--ink);
+}
+.case-calc b { color: var(--red); white-space: nowrap; }
+.case-pay {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 6px;
+  padding: 5px 8px; color: #fff; background: var(--red);
+}
+.case-pay span { flex: 1 1 100%; font-size: 12px; font-weight: 700; opacity: 0.92; }
+.case-pay b { font-size: 26px; line-height: 1.05; font-weight: 900; letter-spacing: 0.01em; }
+.case-pay em { font-style: normal; font-size: 13px; font-weight: 700; }
+.case-flag {
+  margin: 5px 0 0; padding: 4px 6px; background: #fff7e0; border: 1px dashed #d9b75f;
+  color: #6b5317; font-size: 12px; line-height: 1.45;
+}
+.case-total { margin-top: 5px; padding: 5px 7px; background: #fdf1e6; border: 1px solid #f0cfb3; }
+.case-total p { margin: 0; font-size: 13px; font-weight: 700; line-height: 1.4; }
+.case-total p b { color: var(--red); font-size: 16px; white-space: nowrap; }
+.case-total small { display: block; margin-top: 2px; color: var(--muted); font-size: 11.5px; line-height: 1.4; }
+.case-apply {
+  width: 100%; margin-top: 6px; padding: 7px 8px; cursor: pointer;
+  border: 0; background: #1c3541; color: #f4c658; font: inherit; font-size: 14px; font-weight: 900; letter-spacing: 0.04em;
+}
+.case-apply:hover { background: #24495a; }
+.case-applied { margin: 5px 0 0; color: var(--teal); font-size: 12px; font-weight: 700; line-height: 1.4; }
+.case-premium { margin: 6px 0 0; font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.4; }
+.case-premium b { color: var(--red); }
+.case-premium small { color: var(--muted); font-weight: 500; }
+.case-source { margin: 4px 0 0; color: var(--muted); font-size: 11.5px; line-height: 1.4; }
+@media (width<=720px) {
+  .case-pay b { font-size: 24px; }
+}
