@@ -1,0 +1,407 @@
+/* =====================================================================
+ * app.js ── 報價計算與畫面更新（純 JavaScript，不需要任何框架或伺服器）
+ * ---------------------------------------------------------------------
+ * 所有費率與參數都在 rates.js；本檔只放「計算邏輯」與「畫面呈現」。
+ * 計算規則逐行對照原報價工具，結果應與原工具完全相同。
+ * ===================================================================== */
+(function () {
+  "use strict";
+
+  var R = window.QUOTE_RATES;
+  var RULES = R.RULES;
+
+  var money = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 0 }); // 金額：整數
+  var wan = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 1 });   // 萬元：最多 1 位小數
+
+  /* ---------------------------------------------------------------
+   * 民國生日 → 保險年齡（所有險種、所有年齡判斷共用這一個函式）
+   * ---------------------------------------------------------------
+   * 輸入：6 碼（如 700101）或 7 碼（如 1000101）民國生日，非數字字元會被忽略。
+   * 規則（富邦「保險年齡」：超過半年就加一歲）：
+   *   1. 足歲 = 今天以前（含今天）已經過了幾個生日。
+   *   2. 以「最近一次生日 + 6 個月」為半歲日；今天「晚於」半歲日才加 1 歲。
+   *      剛好滿 6 個月的那一天不加歲，隔天才加。
+   * 月底處理（比照民法第 121 條「無相當日者，以其月之末日」）：
+   *   ‧ 半歲日落在不存在的日期時，改用該月最後一天。
+   *     例：8/31 生 → 半歲日為 2/28（閏年 2/29）；3/31 生 → 9/30。
+   *   ‧ 2/29 生日在非閏年以 2/28 當作生日；半歲日仍以原本的 29 日推算（8/29）。
+   * 回傳：{ birth, exactAge（足歲）, age（保險年齡） }；
+   *       日期不存在（如 700231）→ null；生日在未來 → age = -1（顯示生日錯誤）。
+   * 半歲月數設定在 rates.js 的 RULES.insuranceAge.roundUpAfterMonths。
+   * --------------------------------------------------------------- */
+  function dateClamped(year, month0, day) {
+    // 建立 year 年 month0 月（0 起算、可超過 11）的 day 日；該月沒有這一天就用月底
+    var first = new Date(year, month0, 1);
+    var lastDay = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+    return new Date(first.getFullYear(), first.getMonth(), Math.min(day, lastDay));
+  }
+
+  function parseRocBirth(value, today) {
+    var digits = String(value).replace(/\D/g, "");
+    if (digits.length !== 6 && digits.length !== 7) return null;
+    var yearDigits = digits.length - 4;
+    var rocYear = Number(digits.slice(0, yearDigits));
+    var month = Number(digits.slice(yearDigits, yearDigits + 2));
+    var day = Number(digits.slice(yearDigits + 2));
+    var year = rocYear + 1911;
+    var birth = new Date(year, month - 1, day);
+    if (birth.getFullYear() !== year || birth.getMonth() !== month - 1 || birth.getDate() !== day) return null;
+
+    var now = today || new Date();
+    var today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // 只比日期，不比時間
+    if (birth > today0) return { birth: birth, exactAge: -1, age: -1 };
+
+    // 1. 足歲
+    var exactAge = today0.getFullYear() - year;
+    if (dateClamped(today0.getFullYear(), month - 1, day) > today0) exactAge -= 1;
+
+    // 2. 最近一次生日 + N 個月（半歲日），今天晚於半歲日 → 加 1 歲
+    var months = RULES.insuranceAge.roundUpAfterMonths;
+    var halfDay = dateClamped(year + exactAge, month - 1 + months, day);
+    var age = exactAge + (today0 > halfDay ? 1 : 0);
+
+    return { birth: birth, exactAge: exactAge, age: age };
+  }
+
+  function findBone(id) {
+    for (var i = 0; i < R.BONES.length; i++) if (R.BONES[i].id === id) return R.BONES[i];
+    return R.BONES[8]; // 找不到時預設「橈骨或尺骨」（同原工具）
+  }
+
+  /* ---------------------------------------------------------------
+   * 核心計算：輸入 state，回傳所有保費與給付數字（純函式，方便測試）
+   * --------------------------------------------------------------- */
+  function compute(s, today) {
+    var parsed = parseRocBirth(s.rocBirth, today);
+    var age = parsed ? parsed.age : -1;
+    var pay = R.PAY_MODES[s.payMode];
+    var factor = pay.factor;
+    var oi = s.occupation - 1; // 職業類別 → 陣列索引
+
+    // 搭配上限
+    var maxAdh = s.hasExistingMain ? RULES.adh.max : Math.min(RULES.adh.max, s.olaAmount * RULES.adh.mainMultiple);
+    var effectiveAdh = Math.max(0, Math.min(s.adhAmount, maxAdh));
+    var tmrMax = Math.min(RULES.tmr.max, Math.floor(s.adgAmount * RULES.tmr.adgRatio));
+    var effectiveTmr = Math.max(0, Math.min(s.tmrAmount, RULES.tmr.max, Math.floor(s.adgAmount * RULES.tmr.adgRatio)));
+
+    var bone = findBone(s.boneId);
+    var fracture = R.FRACTURE_TYPES[s.fractureType];
+    var fractureFactor = fracture.factor;
+    var hospitalDays = Math.min(RULES.maxHospitalDays, Math.max(0, Number(s.hospitalDaysInput) || 0));
+
+    // ---- 保費 ----
+    var premiums = null;
+    if (age >= 0) {
+      var olaRow = R.OLA6_RATES[s.olaTerm] ? R.OLA6_RATES[s.olaTerm][String(age)] : undefined;
+      var olaRate = s.hasExistingMain ? 0 : (olaRow ? olaRow[s.gender] : undefined);
+      var ola = s.hasExistingMain ? 0 : (olaRate === undefined ? null : olaRate * s.olaAmount);
+
+      var adgRate = age <= 14 ? R.ADG_RATES.child[oi] : age === 15 ? R.ADG_RATES.age15[oi] : R.ADG_RATES.adult[oi];
+      var adhRate = age <= 14 ? R.ADH_RATES.child[oi]
+        : age === 15 ? R.ADH_RATES.age15[oi]
+        : age <= 44 ? R.ADH_RATES.age16to44[oi]
+        : age <= 59 ? R.ADH_RATES.age45to59[oi]
+        : R.ADH_RATES.age60to75[oi];
+
+      var adg = adgRate * s.adgAmount;
+      var tmr = effectiveTmr === 0 ? 0 : R.TMR_FIRST3[oi] + Math.max(0, effectiveTmr - 3) * R.TMR_EACH1[oi];
+      var adm = R.ADM_RATES[oi] * (s.admDaily / 100);
+      var adh = adhRate * effectiveAdh;
+
+      var annual = { ola: ola, adg: adg, tmr: tmr, adm: adm, adh: adh };
+      // 各期保費 = 年繳 × 繳別係數，各險種分別四捨五入後再加總
+      var periodic = {
+        ola: ola === null ? null : Math.round(ola * factor),
+        adg: Math.round(adg * factor),
+        tmr: Math.round(tmr * factor),
+        adm: Math.round(adm * factor),
+        adh: Math.round(adh * factor)
+      };
+      premiums = {
+        annual: annual,
+        periodic: periodic,
+        total: periodic.ola === null ? null : periodic.ola + periodic.adg + periodic.tmr + periodic.adm + periodic.adh
+      };
+    }
+
+    // ---- 骨折情境給付 ----
+    var adhFracture = Math.round(effectiveAdh * 1e4 * (bone.adh / 100) * fractureFactor); // ADH 骨折保險金
+    var adhCare = Math.round(adhFracture * RULES.adhCareRatio);                            // ADH 2% 關懷金
+    var boneDays = Math.round(bone.days * fractureFactor);
+    var allowedHospitalDays = Math.min(Math.max(0, hospitalDays), boneDays);
+    var remainingBoneDays = Math.max(0, boneDays - allowedHospitalDays);
+    var admHospital = allowedHospitalDays * s.admDaily;                                     // ADM 住院日額
+    var admBoneSupport = Math.round(remainingBoneDays * s.admDaily * RULES.admBoneSupportRatio); // ADM 未住院骨折
+    var fixedFractureTotal = adhFracture + adhCare + admHospital + admBoneSupport;
+
+    // ---- 保障彙整 ----
+    var accidentDeathTotal = (s.adgAmount + effectiveAdh) * 1e4;
+    var disabilityTotal = s.adgAmount + effectiveAdh; // 萬元
+    var majorBurnTotal = (s.adgAmount * RULES.burn.adg + effectiveAdh * RULES.burn.adh) * 1e4;
+
+    var ageError = age < 0 ? "請輸入正確的民國生日（6或7碼）"
+      : age > RULES.maxEntryAge ? "附約投保年齡目前以 0～" + RULES.maxEntryAge + " 歲為限" : "";
+    var olaError = !s.hasExistingMain && age >= 0 && premiums && premiums.annual.ola === null
+      ? s.olaTerm + "年期不適用目前年齡，請改選其他繳費年期" : "";
+
+    return {
+      age: age, pay: pay, maxAdh: maxAdh, effectiveAdh: effectiveAdh, tmrMax: tmrMax, effectiveTmr: effectiveTmr,
+      bone: bone, fracture: fracture, hospitalDays: hospitalDays, premiums: premiums,
+      adhFracture: adhFracture, adhCare: adhCare, allowedHospitalDays: allowedHospitalDays,
+      remainingBoneDays: remainingBoneDays, admHospital: admHospital, admBoneSupport: admBoneSupport,
+      fixedFractureTotal: fixedFractureTotal, accidentDeathTotal: accidentDeathTotal,
+      disabilityTotal: disabilityTotal, majorBurnTotal: majorBurnTotal,
+      ageError: ageError, olaError: olaError,
+      existingMainWarning: s.hasExistingMain && !s.existingMainChecked
+    };
+  }
+
+  /* ======================= 畫面 ======================= */
+
+  var state = JSON.parse(JSON.stringify(R.DEFAULTS));
+  var $ = function (id) { return document.getElementById(id); };
+
+  function esc(v) {
+    return String(v).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function fillOptions(sel, items) {
+    sel.innerHTML = items.map(function (it) {
+      return '<option value="' + esc(it[0]) + '">' + esc(it[1]) + "</option>";
+    }).join("");
+  }
+
+  // 與原工具相同：數字欄位只在數值不同時才覆寫（避免打字時游標跳動）
+  function syncNumber(input, value) {
+    if ((value === 0 && input.value === "") || input.value != value) input.value = String(value);
+  }
+  function syncText(input, value) {
+    if (input.value !== String(value)) input.value = String(value);
+  }
+  function showText(el, text) {
+    el.hidden = !text;
+    el.textContent = text || "";
+  }
+
+  function benefitRow(number, title, amount, note, accent) {
+    return '<div class="benefit-row' + (accent ? " benefit-row--accent" : "") + '">' +
+      '<span class="benefit-number">' + number + "</span>" +
+      '<div class="benefit-copy"><strong>' + esc(title) + "</strong><small>" + esc(note) + "</small></div>" +
+      "<b>" + esc(amount) + "</b></div>";
+  }
+
+  function render() {
+    var s = state;
+    var c = compute(s);
+    var p = c.premiums;
+    var adg = s.adgAmount, adm = s.admDaily, adhE = c.effectiveAdh, tmrE = c.effectiveTmr;
+
+    // ---- 左側輸入欄同步 ----
+    syncText($("name"), s.name);
+    syncText($("rocBirth"), s.rocBirth);
+    $("gender").value = s.gender;
+    $("occupation").value = String(s.occupation);
+    $("payMode").value = s.payMode;
+    $("hasExistingMain").checked = s.hasExistingMain;
+    $("existingMainChecked").checked = s.existingMainChecked;
+    $("existingMainRow").hidden = !s.hasExistingMain;
+    $("olaFields").hidden = s.hasExistingMain;
+    $("olaTerm").value = s.olaTerm;
+    syncNumber($("olaAmount"), s.olaAmount);
+    syncNumber($("adgAmount"), s.adgAmount);
+    $("tmrAmount").max = String(c.tmrMax);
+    syncNumber($("tmrAmount"), s.tmrAmount);
+    syncNumber($("admDaily"), s.admDaily);
+    $("adhAmount").max = String(c.maxAdh);
+    syncNumber($("adhAmount"), s.adhAmount);
+    $("boneId").value = s.boneId;
+    $("fractureType").value = s.fractureType;
+    syncText($("hospitalDays"), s.hospitalDaysInput);
+
+    showText($("ageError"), c.ageError);
+    showText($("olaError"), c.olaError);
+    showText($("tmrError"), s.tmrAmount !== tmrE ? "目前依規則以 " + tmrE + " 萬元試算" : "");
+    $("adhNote").textContent = "0＝不投保｜上限 " + c.maxAdh + " 萬元";
+    showText($("adhError"), s.adhAmount !== adhE ? "已依搭配規則改以 " + adhE + " 萬元試算" : "");
+
+    // ---- 右側：保障彙整圖 ----
+    var deathSrc = [adg > 0 ? "ADG " + money.format(adg) + "萬" : "", adhE > 0 ? "ADH " + money.format(adhE) + "萬" : ""].filter(Boolean);
+    var burnSrc = [adg > 0 ? "ADG 依程度 10%／40%" : "", adhE > 0 ? "ADH 25%" : ""].filter(Boolean);
+    var disSrc = [adg > 0 ? "ADG" : "", adhE > 0 ? "ADH" : ""].filter(Boolean);
+    var disNote = disSrc.join("＋") + " 依失能等級 5%～100%" + (disSrc.length > 1 ? " 合計" : "") + "試算";
+
+    var olaPeriodic = p ? p.periodic.ola : undefined;
+    var totalText = (!p || p.total === null) ? "待確認" : "$" + money.format(p.total);
+    var alert = c.existingMainWarning ? "請先確認原主約效期與附約搭配額度。" : (c.olaError || c.ageError);
+    var per = function (k) { return "$" + money.format(p ? p.periodic[k] : 0); };
+
+    var html = "";
+    html += '<div class="quote-head"><div>' +
+      "<span>保障彙整圖</span>" +
+      "<h2>" + esc(s.name || "未填姓名") + " 的意外險全方面保障</h2>" +
+      "<p>" + (c.age >= 0 ? "保險年齡 " + c.age + " 歲" : "年齡待確認") + "｜" + (s.gender === "female" ? "女性" : "男性") +
+      "｜職業第 " + s.occupation + " 類｜" + esc(c.pay.label) + "</p></div>" +
+      '<div class="premium-total"><small>' + esc(c.pay.suffix) + "合計保費</small><strong>" + totalText + "</strong><span>元</span></div></div>";
+
+    if (alert) html += '<div class="alert-strip">' + esc(alert) + "</div>";
+
+    html += '<div class="coverage-wheel"><div class="wheel-core"><b>5 層保障</b><small>保費＋保障一次看懂</small></div><div class="wheel-products">';
+    html += "<div><span>OLA6</span><b>" + (s.hasExistingMain ? "沿用原主約" : s.olaAmount + "萬壽險") + "</b><small>" +
+      (olaPeriodic === null ? "年期待調整" : s.hasExistingMain ? "不計新主約保費" : "$" + money.format(olaPeriodic == null ? 0 : olaPeriodic)) + "</small></div>";
+    html += '<div class="' + (adg === 0 ? "is-not-covered" : "") + '"><span>ADG</span><b>' + (adg === 0 ? "不投保" : adg + "萬意外身故") +
+      "</b><small>" + (adg === 0 ? "未計保費" : per("adg")) + "</small></div>";
+    html += '<div class="' + (tmrE === 0 ? "is-not-covered" : "") + '"><span>TMR</span><b>' + (tmrE === 0 ? "不投保" : tmrE + "萬意外實支") +
+      "</b><small>" + (tmrE === 0 ? "未計保費" : per("tmr")) + "</small></div>";
+    html += '<div class="' + (adm === 0 ? "is-not-covered" : "") + '"><span>ADM</span><b>' + (adm === 0 ? "不投保" : money.format(adm) + "元／日") +
+      "</b><b>意外住院日額</b><small>" + (adm === 0 ? "未計保費" : per("adm")) + "</small></div>";
+    html += '<div class="' + (adhE === 0 ? "is-not-covered" : "is-adh") + '"><span>ADH</span><b>' + (adhE === 0 ? "不投保" : adhE + "萬骨折保障") +
+      "</b><small>" + (adhE === 0 ? "未計保費" : per("adh")) + "</small></div>";
+    html += "</div></div>";
+
+    html += '<div class="benefit-list">';
+    html += benefitRow("1", "意外身故",
+      c.accidentDeathTotal === 0 ? "不投保" : wan.format(c.accidentDeathTotal / 1e4) + " 萬",
+      c.accidentDeathTotal === 0 ? "此保障項目未投保" : deathSrc.join("＋") + "，符合各附約條款時" + (deathSrc.length > 1 ? "合計" : "試算"));
+    html += benefitRow("2", "重大燒燙傷",
+      c.majorBurnTotal === 0 ? "不投保" : "最高 " + wan.format(c.majorBurnTotal / 1e4) + " 萬",
+      c.majorBurnTotal === 0 ? "此保障項目未投保" : burnSrc.join("＋") + "，符合各附約條款時" + (burnSrc.length > 1 ? "合計" : "試算"));
+    html += benefitRow("3", "意外失能",
+      c.disabilityTotal === 0 ? "不投保" : wan.format(c.disabilityTotal * RULES.disabilityMinRatio) + "～" + wan.format(c.disabilityTotal) + " 萬",
+      c.disabilityTotal === 0 ? "此保障項目未投保" : disNote);
+    html += benefitRow("4", "意外醫療實支實付",
+      tmrE === 0 ? "不投保" : "最高 " + tmrE + " 萬",
+      tmrE === 0 ? "此方案未納入 TMR" : "TMR 同一次傷害、依實際醫療費用與條款限額給付");
+    html += benefitRow("5", "意外住院／門診手術",
+      adm === 0 ? "不投保" : "住院 " + money.format(adm) + "元／日｜門診手術 " + money.format(adm) + "元／次",
+      adm === 0 ? "此方案未納入 ADM" : "ADM 門診手術每次意外傷害以一次為限");
+    html += benefitRow("6", c.bone.label + "｜" + c.fracture.label,
+      adhE === 0 ? "不投保" : money.format(c.adhFracture + c.adhCare) + " 元",
+      adhE === 0 ? "此方案未納入 ADH" : "ADH 骨折金 " + money.format(c.adhFracture) + "＋2%關懷金 " + money.format(c.adhCare),
+      adhE > 0);
+    html += "</div>";
+
+    html += '<div class="fracture-calculation"><div class="fracture-title"><span>骨折可領多少？</span><h3>符合條款定義的 情境試算</h3></div>' +
+      '<div class="calculation-grid">' +
+      "<div><small>ADH 骨折＋關懷金</small><b>" + money.format(c.adhFracture + c.adhCare) + "</b><span>元</span></div>" +
+      "<div><small>ADM 住院 " + c.allowedHospitalDays + " 日</small><b>" + (adm === 0 ? "未投保" : money.format(c.admHospital)) + "</b>" + (adm !== 0 ? "<span>元</span>" : "") + "</div>" +
+      "<div><small>ADM 未住院骨折給付</small><b>" + (adm === 0 ? "未投保" : money.format(c.admBoneSupport)) + "</b>" + (adm !== 0 ? "<span>元</span>" : "") + "</div>" +
+      '<div class="calculation-total"><small>定額給付合計試算</small><b>' + money.format(c.fixedFractureTotal) + "</b><span>元</span></div>" +
+      "</div><p>" + (tmrE === 0 ? "本方案未投保 TMR。"
+        : '<strong class="tmr-highlight">另有 TMR 意外醫療實支實付最高 ' + tmrE + " 萬元</strong><span>，依實際費用及條款審核，不列入定額合計。</span>") +
+      "</p></div>";
+
+    html += '<div class="quote-footnotes"><strong>試算依據與重要提醒</strong>' +
+      "<p>附約須搭配有效主約；OLA6 最低 " + RULES.ola6.min + " 萬元。附約額度與搭配規定仍須覆核。</p>" +
+      "<p>本頁僅供試算；實際承保、保費與理賠，以正式文件及富邦人壽審核為準。</p></div>";
+
+    $("quoteCard").innerHTML = html;
+    renderChart(c);
+  }
+
+  /* ---------------- ADH 骨折別表圖：標示目前選擇的骨折部位 ----------------
+   * 位置資料在 rates.js 的 BONE_CHART（百分比），圖片縮放時會自動對齊。
+   * 只在部位／程度／ADH 金額改變時才重畫，避免輸入其他欄位時動畫一直重播。 */
+  var lastChartKey = "";
+
+  function pctText(v) { return Number(v.toFixed(2)) + "%"; } // 例：0.75%、30%
+
+  function factorText(f) { // 1/2、1/4 等分數顯示
+    if (f === 1) return "";
+    var inv = 1 / f;
+    return Math.abs(inv - Math.round(inv)) < 1e-9 ? "1/" + Math.round(inv) : String(f);
+  }
+
+  function renderChart(c) {
+    var bone = c.bone, f = c.fracture.factor, pos = R.BONE_CHART[bone.id];
+    var key = [bone.id, state.fractureType, c.effectiveAdh, c.adhFracture].join("|");
+    if (key === lastChartKey) return;
+    lastChartKey = key;
+
+    var eff = bone.adh * f;
+    var overlay = "";
+    if (pos) {
+      var b = pos.box, l = pos.line;
+      overlay =
+        '<svg class="chart-lines" viewBox="0 0 100 100" preserveAspectRatio="none">' +
+          '<line class="chart-line-glow" x1="' + l[0] + '" y1="' + l[1] + '" x2="' + l[2] + '" y2="' + l[3] + '"/>' +
+          '<line class="chart-line-core" x1="' + l[0] + '" y1="' + l[1] + '" x2="' + l[2] + '" y2="' + l[3] + '"/>' +
+        "</svg>" +
+        '<span class="chart-spot" style="left:' + b[0] + "%;top:" + b[1] + "%;width:" + b[2] + "%;height:" + b[3] + '%"></span>' +
+        '<span class="chart-dot" style="left:' + l[2] + "%;top:" + l[3] + '%"></span>' +
+        '<span class="chart-bubble" style="left:' + (b[0] + b[2]) + "%;top:" + b[1] + '%">' +
+          '<span class="chart-bubble-name">' + esc(bone.label) + "</span>" +
+          "<b>" + bone.adh + "%</b>" +
+          (f !== 1 ? '<small>' + esc(c.fracture.label) + " " + pctText(eff) + "</small>" : "") +
+        "</span>";
+    }
+    var boxes = document.querySelectorAll(".chart-overlay");
+    for (var i = 0; i < boxes.length; i++) boxes[i].innerHTML = overlay;
+
+    var callout = $("chartCallout");
+    if (callout) {
+      callout.innerHTML =
+        '<span class="callout-label">目前骨折部位</span>' +
+        '<div class="callout-main"><strong>' + esc(bone.label) + "</strong><b>" + bone.adh + "%</b></div>" +
+        "<em>" + esc(c.fracture.label) + " → 保險金額 × " +
+          (f === 1 ? bone.adh + "%" : bone.adh + "% × " + factorText(f) + " = <mark>" + pctText(eff) + "</mark>") + "</em>" +
+        "<em>" + (c.effectiveAdh > 0
+          ? "ADH " + money.format(c.effectiveAdh) + " 萬 → 骨折保險金 <mark>" + money.format(c.adhFracture) + " 元</mark>"
+          : "目前未投保 ADH") + "</em>";
+    }
+  }
+
+  /* ---------------- 事件綁定 ---------------- */
+  function clampNum(v, min, max) { return Math.min(max, Math.max(min, Number(v))); }
+
+  function init() {
+    fillOptions($("occupation"), [1, 2, 3, 4, 5, 6].map(function (n) { return [n, "第 " + n + " 類"]; }));
+    fillOptions($("payMode"), Object.keys(R.PAY_MODES).map(function (k) { return [k, R.PAY_MODES[k].label]; }));
+    fillOptions($("olaTerm"), RULES.ola6.terms.map(function (t) { return [t, t + " 年"]; }));
+    fillOptions($("boneId"), R.BONES.map(function (b) { return [b.id, b.label]; }));
+    fillOptions($("fractureType"), Object.keys(R.FRACTURE_TYPES).map(function (k) { return [k, R.FRACTURE_TYPES[k].label]; }));
+    $("olaAmount").min = String(RULES.ola6.min); $("olaAmount").max = String(RULES.ola6.max);
+    $("adgAmount").max = String(RULES.adg.max); $("adgAmount").step = String(RULES.adg.step);
+    $("admDaily").max = String(RULES.adm.max); $("admDaily").step = String(RULES.adm.step);
+    $("adhAmount").step = String(RULES.adh.step);
+    $("hospitalDays").max = String(RULES.maxHospitalDays);
+
+    function on(id, ev, fn) { $(id).addEventListener(ev, function (e) { fn(e.target); render(); }); }
+    on("name", "input", function (t) { state.name = t.value; });
+    on("rocBirth", "input", function (t) { state.rocBirth = t.value; });
+    on("gender", "change", function (t) { state.gender = t.value; });
+    on("occupation", "change", function (t) { state.occupation = Number(t.value); });
+    on("payMode", "change", function (t) { state.payMode = t.value; });
+    on("hasExistingMain", "change", function (t) { state.hasExistingMain = t.checked; });
+    on("existingMainChecked", "change", function (t) { state.existingMainChecked = t.checked; });
+    on("olaTerm", "change", function (t) { state.olaTerm = t.value; });
+    on("olaAmount", "input", function (t) { state.olaAmount = clampNum(t.value, 0, RULES.ola6.max); });
+    on("olaAmount", "blur", function () { state.olaAmount = Math.max(RULES.ola6.min, state.olaAmount); }); // 離開欄位時補到最低 10 萬
+    on("adgAmount", "input", function (t) { state.adgAmount = clampNum(t.value, 0, RULES.adg.max); });
+    on("tmrAmount", "input", function (t) { state.tmrAmount = clampNum(t.value, 0, RULES.tmr.max); });
+    on("admDaily", "input", function (t) { state.admDaily = clampNum(t.value, 0, RULES.adm.max); });
+    on("adhAmount", "input", function (t) { state.adhAmount = clampNum(t.value, 0, compute(state).maxAdh); });
+    on("boneId", "change", function (t) { state.boneId = t.value; });
+    on("fractureType", "change", function (t) { state.fractureType = t.value; });
+    on("hospitalDays", "input", function (t) { state.hospitalDaysInput = t.value; });
+    on("hospitalDays", "blur", function () { state.hospitalDaysInput = String(compute(state).hospitalDays); });
+    render();
+    initChartLightbox();
+  }
+
+  /* ---------------- ADH 骨折別表：點圖放大 ----------------
+   * 支援 <dialog> 的瀏覽器以燈箱顯示；不支援時保留連結預設行為（新分頁開啟圖片）。 */
+  function initChartLightbox() {
+    var thumb = $("chartThumb"), box = $("chartLightbox");
+    if (!thumb || !box || typeof box.showModal !== "function") return;
+    thumb.addEventListener("click", function (e) { e.preventDefault(); box.showModal(); });
+    box.addEventListener("click", function () { box.close(); }); // 點任意處關閉（Esc 也可關閉）
+  }
+
+  // 對外提供計算函式（測試或日後擴充用）
+  window.QuoteCalc = { parseRocBirth: parseRocBirth, compute: compute, getState: function () { return state; } };
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+})();

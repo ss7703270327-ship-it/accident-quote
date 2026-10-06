@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>意外險全方位保障｜即時報價系統</title>
+  <meta name="description" content="OLA6、ADG、TMR、ADM、ADH 保費與骨折給付情境試算。" />
+  <link rel="icon" href="assets/favicon.svg" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<main class="app-shell">
+  <header class="topbar">
+    <div>
+      <span class="eyebrow">意外保障提案工具</span>
+      <h1>意外險全方位保障</h1>
+    </div>
+  </header>
+
+  <div class="workspace-grid">
+    <!-- ================= 左側：輸入投保資料 ================= -->
+    <aside class="input-panel">
+      <div class="panel-title">
+        <div><strong>輸入投保資料</strong><small>右側會同步更新</small></div>
+      </div>
+
+      <section class="basic-grid">
+        <label>姓名<input id="name" /></label>
+        <label>民國生日<input id="rocBirth" inputmode="numeric" placeholder="例：700101" /></label>
+        <label>性別
+          <select id="gender">
+            <option value="female">女性</option>
+            <option value="male">男性</option>
+          </select>
+        </label>
+        <label>職業類別<select id="occupation"></select></label>
+        <label class="wide">繳別<select id="payMode"></select></label>
+      </section>
+      <p class="field-error" id="ageError" hidden></p>
+
+      <!-- OLA6 主約 -->
+      <section class="product-input" style="--product-tone:#9f7a2e">
+        <div class="product-heading"><span class="product-code">OLA6</span><strong>金來寶小額終身壽險</strong></div>
+        <label class="switch-row">
+          <input type="checkbox" id="hasExistingMain" /><span>已有富邦有效主約，不另買 OLA6</span>
+        </label>
+        <label class="check-row" id="existingMainRow" hidden>
+          <input type="checkbox" id="existingMainChecked" />我已確認原主約效期可涵蓋附約期間；保額比例仍待業務員覆核
+        </label>
+        <div class="inline-fields" id="olaFields">
+          <label>繳費年期<select id="olaTerm"></select></label>
+          <label>壽險保額
+            <div class="amount-control">
+              <input type="number" id="olaAmount" inputmode="numeric" min="10" max="90" step="1" /><span>萬元</span>
+            </div>
+          </label>
+        </div>
+        <p class="field-error" id="olaError" hidden></p>
+      </section>
+
+      <!-- 附約 -->
+      <div class="rider-grid">
+        <section class="product-input" style="--product-tone:#1267a5">
+          <div class="product-heading"><span class="product-code">ADG</span><strong>意外身故／失能／燒燙傷</strong></div>
+          <label>保額
+            <div class="amount-control">
+              <input type="number" id="adgAmount" min="0" max="2000" step="10" /><span>萬元</span>
+            </div>
+          </label>
+          <p class="rule-note">0＝不投保｜直接輸入或箭頭調整</p>
+        </section>
+
+        <section class="product-input" style="--product-tone:#11857c">
+          <div class="product-heading"><span class="product-code">TMR</span><strong>意外醫療實支實付</strong></div>
+          <label>保額
+            <div class="amount-control">
+              <input type="number" id="tmrAmount" min="0" step="1" /><span>萬元</span>
+            </div>
+          </label>
+          <p class="rule-note">0＝不投保｜上限 ADG 10%</p>
+          <p class="field-error" id="tmrError" hidden></p>
+        </section>
+
+        <section class="product-input" style="--product-tone:#7451a2">
+          <div class="product-heading"><span class="product-code">ADM</span><strong>意外住院日額／門診手術</strong></div>
+          <label>日額
+            <div class="amount-control">
+              <input type="number" id="admDaily" min="0" max="2000" step="100" /><span>元／日</span>
+            </div>
+          </label>
+          <p class="rule-note">0＝不投保｜直接輸入或箭頭調整</p>
+        </section>
+
+        <section class="product-input" style="--product-tone:#d43b35">
+          <div class="product-heading"><span class="product-code">ADH</span><strong>骨力勇意外骨折傷害</strong></div>
+          <label>保額
+            <div class="amount-control">
+              <input type="number" id="adhAmount" min="0" step="10" /><span>萬元</span>
+            </div>
+          </label>
+          <p class="rule-note" id="adhNote"></p>
+          <p class="field-error" id="adhError" hidden></p>
+        </section>
+      </div>
+
+      <!-- 骨折情境 -->
+      <section class="scenario-box">
+        <div class="scenario-title"><span>骨折情境</span><b>以您的左手橈骨案例為預設</b></div>
+        <label>骨折部位<select id="boneId"></select></label>
+        <div class="inline-fields">
+          <label>骨折程度<select id="fractureType"></select></label>
+          <label>實際住院日數
+            <div class="amount-control">
+              <input type="number" id="hospitalDays" inputmode="numeric" min="0" max="90" step="1" /><span>日</span>
+            </div>
+          </label>
+        </div>
+      </section>
+    </aside>
+
+    <!-- ================= 右側：保障彙整圖（由 app.js 即時產生） ================= -->
+    <section class="summary-panel">
+      <div class="quote-card" id="quoteCard"></div>
+
+      <!-- ADH 骨折別表圖（DM 第 3 頁）：會依左側「骨折部位」自動框出該部位並放大顯示比例；點圖放大 -->
+      <figure class="chart-card">
+        <a class="chart-thumb" id="chartThumb" href="assets/adh-fracture-chart.webp" target="_blank" rel="noopener"
+           aria-label="放大檢視骨力勇 ADH 骨折及脫臼給付比例圖">
+          <span class="chart-stage">
+            <img src="assets/adh-fracture-chart.webp" width="922" height="1296"
+                 alt="骨力勇 ADH 意外傷害骨折及脫臼開放性復位術保險金給付比例圖" />
+            <span class="chart-overlay" aria-hidden="true"></span>
+          </span>
+          <span class="chart-zoom">點圖放大</span>
+        </a>
+        <figcaption>
+          <span class="chart-kicker">ADH 給付比例</span>
+          <strong>骨力勇 ADH 骨折及脫臼給付比例</strong>
+          <small>（取自 DM，詳見條款）</small>
+          <div class="chart-callout" id="chartCallout" aria-live="polite"></div>
+          <p>左側：意外傷害骨折保險金給付比例（保險金額 × 3%～80%）。</p>
+          <p>右側：意外傷害脫臼開放性復位術保險金給付比例（保險金額 × 10%～30%）。</p>
+          <p class="chart-hint">變更左側「骨折部位」，圖上會自動標示；點擊圖片可放大檢視。</p>
+        </figcaption>
+      </figure>
+    </section>
+  </div>
+</main>
+
+<!-- 放大檢視用的燈箱（點任意處或按 Esc 關閉） -->
+<dialog class="chart-lightbox" id="chartLightbox" aria-label="骨力勇 ADH 骨折及脫臼給付比例（放大）">
+  <button type="button" class="chart-close" aria-label="關閉">關閉 ✕</button>
+  <div class="chart-stage">
+    <img src="assets/adh-fracture-chart.webp" width="922" height="1296"
+         alt="骨力勇 ADH 意外傷害骨折及脫臼開放性復位術保險金給付比例圖（放大）" />
+    <div class="chart-overlay" aria-hidden="true"></div>
+  </div>
+</dialog>
+
+<!-- 載入順序：先費率資料，再主程式 -->
+<script src="rates.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
