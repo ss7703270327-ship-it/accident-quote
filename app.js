@@ -381,7 +381,7 @@
   /* ---------------- 點圖上的骨折部位 → 直接選該部位、顯示理賠金額 ----------------
    * 用 BONE_CHART 的百分比位置做點擊判定：點在標籤框上（或框旁幾 px 內），
    * 或點在骨頭上的引線端點附近，就選取最近的部位。兩個部位共用同一端點時（橈骨／脛骨），
-   * 連點會在兩者間切換。沒點到部位 → 縮圖照舊開啟放大燈箱、燈箱內則關閉。 */
+   * 連點會在兩者間切換。點到圖上空白處不做任何事。 */
   var coarsePointer = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
 
   function hitBone(stage, clientX, clientY) {
@@ -389,7 +389,8 @@
     if (!r.width) return null;
     var x = clientX - r.left, y = clientY - r.top;
     if (x < 0 || y < 0 || x > r.width || y > r.height) return null;
-    var tolBox = coarsePointer ? 10 : 6, tolDot = coarsePointer ? 22 : 15; // 容許誤差（px）
+    // 容許誤差（px）：點在標籤／比例格外圍這個距離內也算；相鄰標籤以「最近者」為準，不會選錯
+    var tolBox = coarsePointer ? 16 : 12, tolDot = coarsePointer ? 26 : 18;
     var best = null, groups = {};
     Object.keys(R.BONE_CHART).forEach(function (id) {
       var p = R.BONE_CHART[id], b = p.box, l = p.line;
@@ -470,26 +471,18 @@
     on("hospitalDays", "input", function (t) { state.hospitalDaysInput = t.value; });
     on("hospitalDays", "blur", function () { state.hospitalDaysInput = String(compute(state).hospitalDays); });
     render();
-    initChartLightbox();
+    initChartPicker();
   }
 
-  /* ---------------- ADH 骨折別表：點圖放大 ----------------
-   * 支援 <dialog> 的瀏覽器以燈箱顯示；不支援時保留連結預設行為（新分頁開啟圖片）。 */
-  function initChartLightbox() {
-    var thumb = $("chartThumb"), box = $("chartLightbox");
-    if (!thumb || !box) return;
-    var canZoom = typeof box.showModal === "function";
+  /* ---------------- ADH 骨折別表：點圖上的部位 → 選取 ---------------- */
+  function initChartPicker() {
+    var thumb = $("chartThumb");
+    if (!thumb) return;
+    var stage = thumb.querySelector(".chart-stage");
     initChartClicks();
-    thumb.addEventListener("click", function (e) {
-      // 滑鼠／觸控點到骨折部位 → 選取該部位；鍵盤 Enter（detail 為 0）或點到其他地方 → 放大
-      var id = e.detail ? hitBone(thumb.querySelector(".chart-stage"), e.clientX, e.clientY) : null;
-      if (id) { e.preventDefault(); selectBone(id); return; }
-      if (canZoom) { e.preventDefault(); box.showModal(); }
-    });
-    if (!canZoom) return;
-    box.addEventListener("click", function (e) { // 燈箱內點骨折部位 → 選取；點其他地方 → 關閉（Esc 也可關閉）
-      var id = e.target.closest(".chart-close") ? null : hitBone(box.querySelector(".chart-stage"), e.clientX, e.clientY);
-      if (id) selectBone(id); else box.close();
+    stage.addEventListener("click", function (e) {
+      var id = hitBone(stage, e.clientX, e.clientY);
+      if (id) selectBone(id); // 沒點到部位：不做任何事
     });
   }
 

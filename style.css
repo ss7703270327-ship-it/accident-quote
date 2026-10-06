@@ -1099,7 +1099,7 @@ select:focus {
 }
 
 /* =====================================================================
- * ADH 骨折別表圖卡片（右側報價卡下方）：依「骨折部位」標示 + 點圖放大燈箱
+ * ADH 骨折別表圖卡片（右側報價卡下方）：依「骨折部位」標示；點圖上的部位可直接選取
  * ===================================================================== */
 .chart-card {
   background: var(--paper);
@@ -1117,11 +1117,6 @@ select:focus {
   background: #fff;
   display: block;
   position: relative;
-  cursor: zoom-in;
-}
-.chart-thumb:focus-visible {
-  outline: 3px solid #05679a55;
-  outline-offset: 2px;
 }
 /* 圖片與標示圖層：圖層用百分比定位，與圖片一起縮放 */
 .chart-stage {
@@ -1204,7 +1199,7 @@ select:focus {
   0% { transform: scale(0.4); opacity: 1; }
   100% { transform: scale(1.5); opacity: 0; }
 }
-/* 放大比例氣泡：貼在標籤框右上方 */
+/* 大字比例氣泡：貼在標籤框右上方 */
 .chart-bubble {
   color: #fff;
   background: var(--red);
@@ -1246,16 +1241,6 @@ select:focus {
   font-size: 0.34em;
   font-weight: 800;
   margin-top: 0.12em;
-}
-.chart-zoom {
-  color: #fff;
-  background: #183846e6;
-  padding: 3px 8px;
-  font-size: 13px;
-  font-weight: 800;
-  position: absolute;
-  right: 6px;
-  bottom: 6px;
 }
 .chart-card figcaption {
   flex-direction: column;
@@ -1340,32 +1325,6 @@ select:focus {
   padding: 0 3px;
   font-weight: 900;
 }
-.chart-lightbox {
-  background: #fff;
-  border: 0;
-  width: min(96vw, 922px);
-  max-width: 96vw;
-  max-height: 94vh;
-  margin: auto;
-  padding: 0;
-  overflow: auto;
-  box-shadow: 0 20px 60px #0008;
-  cursor: zoom-out;
-}
-.chart-lightbox::backdrop {
-  background: #0d1d24cc;
-}
-.chart-close {
-  color: #fff;
-  background: #183846;
-  padding: 6px 12px;
-  font-size: 14px;
-  font-weight: 800;
-  position: sticky;
-  top: 0;
-  float: right;
-  z-index: 3;
-}
 @media (width<=720px) {
   .chart-card {
     grid-template-columns: 1fr;
@@ -1387,8 +1346,7 @@ select:focus {
   }
 }
 @media print {
-  .chart-card,
-  .chart-lightbox {
+  .chart-card {
     display: none;
   }
 }
@@ -1447,8 +1405,7 @@ select:focus {
 }
 
 /* ---------- 點圖上的骨折部位 → 選取並顯示理賠金額 ---------- */
-.chart-stage.is-over-bone,
-.chart-lightbox .chart-stage.is-over-bone {
+.chart-stage.is-over-bone {
   cursor: pointer;
 }
 /* 滑鼠移到可點的部位：淡金色虛線框（只在有滑鼠的裝置） */
@@ -1480,7 +1437,7 @@ select:focus {
   position: absolute;
   left: 6px;
   bottom: 6px;
-  max-width: calc(100% - 120px);
+  max-width: calc(100% - 12px);
   color: #fff;
   background: #c83632e6;
   padding: 3px 8px;
