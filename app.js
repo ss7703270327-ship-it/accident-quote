@@ -298,6 +298,7 @@
 
     $("quoteCard").innerHTML = html;
     renderChart(c);
+    renderCallout(c);
   }
 
   /* ---------------- ADH 骨折別表圖：標示目前選擇的骨折部位 ----------------
@@ -334,22 +335,104 @@
           '<span class="chart-bubble-name">' + esc(bone.label) + "</span>" +
           "<b>" + bone.adh + "%</b>" +
           (f !== 1 ? '<small>' + esc(c.fracture.label) + " " + pctText(eff) + "</small>" : "") +
+          // 理賠金額＝報價卡「骨折」那一列的金額（ADH 骨折金＋2% 關懷金），不另外計算
+          '<em class="chart-bubble-pay">' + (c.effectiveAdh > 0
+            ? "理賠 " + money.format(c.adhFracture + c.adhCare) + " 元" : "未投保 ADH") + "</em>" +
         "</span>";
     }
     var boxes = document.querySelectorAll(".chart-overlay");
     for (var i = 0; i < boxes.length; i++) boxes[i].innerHTML = overlay;
+  }
 
+  // 右側說明卡：每次都更新（含 ADM 住院日數等，數字全部取自報價卡同一份計算結果 c）
+  function renderCallout(c) {
     var callout = $("chartCallout");
-    if (callout) {
-      callout.innerHTML =
-        '<span class="callout-label">目前骨折部位</span>' +
-        '<div class="callout-main"><strong>' + esc(bone.label) + "</strong><b>" + bone.adh + "%</b></div>" +
-        "<em>" + esc(c.fracture.label) + " → 保險金額 × " +
-          (f === 1 ? bone.adh + "%" : bone.adh + "% × " + factorText(f) + " = <mark>" + pctText(eff) + "</mark>") + "</em>" +
-        "<em>" + (c.effectiveAdh > 0
-          ? "ADH " + money.format(c.effectiveAdh) + " 萬 → 骨折保險金 <mark>" + money.format(c.adhFracture) + " 元</mark>"
-          : "目前未投保 ADH") + "</em>";
+    if (!callout) return;
+    var bone = c.bone, f = c.fracture.factor, eff = bone.adh * f;
+    var adh = c.effectiveAdh > 0, adm = state.admDaily > 0;
+    var row = function (label, value, cls) {
+      return '<div class="' + (cls || "") + '"><dt>' + label + "</dt><dd>" + value + "</dd></div>";
+    };
+    var yuan = function (v) { return money.format(v) + " 元"; };
+    var pay = "";
+    if (adh) {
+      pay += row("ADH 骨折保險金", yuan(c.adhFracture));
+      pay += row("2% 關懷金", yuan(c.adhCare));
+      pay += row("ADH 理賠小計", yuan(c.adhFracture + c.adhCare), "is-sub");
+    } else {
+      pay += row("ADH", "未投保 ADH", "is-muted");
     }
+    if (adm) {
+      pay += row("ADM 住院 " + c.allowedHospitalDays + " 日", yuan(c.admHospital));
+      pay += row("ADM 未住院骨折給付", yuan(c.admBoneSupport));
+    }
+    if (adm || adh) pay += row("定額給付合計", yuan(c.fixedFractureTotal), "is-total");
+    callout.innerHTML =
+      '<span class="callout-label">目前骨折部位</span>' +
+      '<div class="callout-main"><strong>' + esc(bone.label) + "</strong><b>" + bone.adh + "%</b></div>" +
+      "<em>" + esc(c.fracture.label) + " → 保險金額 × " +
+        (f === 1 ? bone.adh + "%" : bone.adh + "% × " + factorText(f) + " = <mark>" + pctText(eff) + "</mark>") + "</em>" +
+      "<em>" + (adh
+        ? "ADH " + money.format(c.effectiveAdh) + " 萬 → 骨折保險金 <mark>" + money.format(c.adhFracture) + " 元</mark>"
+        : "目前未投保 ADH") + "</em>" +
+      '<dl class="callout-pay">' + pay + "</dl>";
+  }
+
+  /* ---------------- 點圖上的骨折部位 → 直接選該部位、顯示理賠金額 ----------------
+   * 用 BONE_CHART 的百分比位置做點擊判定：點在標籤框上（或框旁幾 px 內），
+   * 或點在骨頭上的引線端點附近，就選取最近的部位。兩個部位共用同一端點時（橈骨／脛骨），
+   * 連點會在兩者間切換。沒點到部位 → 縮圖照舊開啟放大燈箱、燈箱內則關閉。 */
+  var coarsePointer = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+
+  function hitBone(stage, clientX, clientY) {
+    var r = stage.getBoundingClientRect();
+    if (!r.width) return null;
+    var x = clientX - r.left, y = clientY - r.top;
+    if (x < 0 || y < 0 || x > r.width || y > r.height) return null;
+    var tolBox = coarsePointer ? 10 : 6, tolDot = coarsePointer ? 22 : 15; // 容許誤差（px）
+    var best = null, groups = {};
+    Object.keys(R.BONE_CHART).forEach(function (id) {
+      var p = R.BONE_CHART[id], b = p.box, l = p.line;
+      var bx = b[0] / 100 * r.width, by = b[1] / 100 * r.height, bw = b[2] / 100 * r.width, bh = b[3] / 100 * r.height;
+      var dBox = Math.hypot(Math.max(bx - x, 0, x - bx - bw), Math.max(by - y, 0, y - by - bh));
+      var ex = l[2] / 100 * r.width, ey = l[3] / 100 * r.height;
+      var dDot = Math.hypot(x - ex, y - ey);
+      var key = l[2] + "," + l[3];
+      (groups[key] = groups[key] || []).push(id);
+      if (dBox <= tolBox && (!best || dBox < best.d)) best = { id: id, d: dBox, dot: null };
+      if (dDot <= tolDot && (!best || dDot < best.d)) best = { id: id, d: dDot, dot: key };
+    });
+    if (!best) return null;
+    if (best.dot) { // 共用端點：已選其中一個時，再點一次換下一個
+      var g = groups[best.dot], cur = g.indexOf(state.boneId);
+      return cur >= 0 ? g[(cur + 1) % g.length] : g[0];
+    }
+    return best.id;
+  }
+
+  function selectBone(id) {
+    if (!id || !R.BONE_CHART[id]) return;
+    state.boneId = id; // 與左側「骨折部位」下拉選單相同效果
+    render();
+  }
+
+  function initChartClicks() {
+    var stages = document.querySelectorAll(".chart-stage");
+    for (var i = 0; i < stages.length; i++) (function (stage) {
+      var hover = document.createElement("span");
+      hover.className = "chart-hover"; hover.hidden = true;
+      stage.appendChild(hover);
+      stage.addEventListener("mousemove", function (e) {
+        var id = hitBone(stage, e.clientX, e.clientY);
+        stage.classList.toggle("is-over-bone", !!id);
+        hover.hidden = !id;
+        if (!id) { stage.removeAttribute("title"); return; }
+        var b = R.BONE_CHART[id].box, bone = findBone(id);
+        hover.style.cssText = "left:" + b[0] + "%;top:" + b[1] + "%;width:" + b[2] + "%;height:" + b[3] + "%";
+        stage.title = bone.label + " " + bone.adh + "%：點一下看理賠金額";
+      });
+      stage.addEventListener("mouseleave", function () { hover.hidden = true; stage.classList.remove("is-over-bone"); });
+    })(stages[i]);
   }
 
   /* ---------------- 事件綁定 ---------------- */
@@ -394,9 +477,20 @@
    * 支援 <dialog> 的瀏覽器以燈箱顯示；不支援時保留連結預設行為（新分頁開啟圖片）。 */
   function initChartLightbox() {
     var thumb = $("chartThumb"), box = $("chartLightbox");
-    if (!thumb || !box || typeof box.showModal !== "function") return;
-    thumb.addEventListener("click", function (e) { e.preventDefault(); box.showModal(); });
-    box.addEventListener("click", function () { box.close(); }); // 點任意處關閉（Esc 也可關閉）
+    if (!thumb || !box) return;
+    var canZoom = typeof box.showModal === "function";
+    initChartClicks();
+    thumb.addEventListener("click", function (e) {
+      // 滑鼠／觸控點到骨折部位 → 選取該部位；鍵盤 Enter（detail 為 0）或點到其他地方 → 放大
+      var id = e.detail ? hitBone(thumb.querySelector(".chart-stage"), e.clientX, e.clientY) : null;
+      if (id) { e.preventDefault(); selectBone(id); return; }
+      if (canZoom) { e.preventDefault(); box.showModal(); }
+    });
+    if (!canZoom) return;
+    box.addEventListener("click", function (e) { // 燈箱內點骨折部位 → 選取；點其他地方 → 關閉（Esc 也可關閉）
+      var id = e.target.closest(".chart-close") ? null : hitBone(box.querySelector(".chart-stage"), e.clientX, e.clientY);
+      if (id) selectBone(id); else box.close();
+    });
   }
 
   // 對外提供計算函式（測試或日後擴充用）
