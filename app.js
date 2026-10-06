@@ -509,7 +509,7 @@
     })(stages[i]);
   }
 
-  /* ---------------- 左欄「案例分享」：大心團隊真實理賠（資料：rates.js 的 CASES） ---------------- */
+  /* ---------------- 左欄「客戶理賠案例」（資料：rates.js 的 CASES） ---------------- */
   var activeCase = 0;
 
   function renderCaseShare() {
@@ -517,12 +517,13 @@
     if (!tabs || !body || !cases.length) return;
     tabs.innerHTML = cases.map(function (k, i) {
       return '<button type="button" role="tab" class="case-tab' + (i === activeCase ? " is-active" : "") + '" aria-selected="' + (i === activeCase) +
-        '" data-case="' + i + '">案例' + k.no + '<small>' + esc(k.title) + '</small></button>';
+        '" data-case="' + i + '">客戶案例' + k.no + '<small>' + esc(k.title) + '</small></button>';
     }).join("");
     var k = cases[activeCase];
     var existingSum = k.existing.reduce(function (a, e) { return a + e[1]; }, 0);
     body.innerHTML =
-      '<div class="case-title"><span class="case-no">案例' + k.no + '</span><strong>' + esc(k.title) + '</strong></div>' +
+      '<div class="case-title"><span class="case-no">客戶案例' + k.no + '</span><strong>' + esc(k.title) + '</strong></div>' +
+      (k.story ? '<p class="case-story">' + esc(k.story) + '</p>' : "") +
       '<dl class="case-facts">' +
         '<div><dt>部位</dt><dd>' + esc(k.part) + '</dd></div>' +
         '<div><dt>骨折程度</dt><dd>' + esc(k.fracture) + '</dd></div>' +
@@ -560,7 +561,7 @@
     chartView.mode = "bone";
     render();
     var c = compute(state), got = c.adhFracture + c.adhCare;
-    var msg = "已套用案例" + k.no + "：ADH " + k.adhAmount + " 萬、" + findBone(k.boneId).label + "、" + R.FRACTURE_TYPES[k.fractureType].label +
+    var msg = "已套用客戶案例" + k.no + "：ADH " + k.adhAmount + " 萬、" + findBone(k.boneId).label + "、" + R.FRACTURE_TYPES[k.fractureType].label +
       " → 骨折理賠 " + money.format(got) + " 元";
     var out = $("caseApplied");
     if (out) { out.textContent = msg + (notes.length ? "；" + notes.join("；") : "") + "。"; out.hidden = false; }
