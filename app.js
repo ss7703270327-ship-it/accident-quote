@@ -301,7 +301,7 @@
     renderCallout(c);
   }
 
-  /* ---------------- ADH 骨折別表圖：標示目前選擇的骨折（或脫臼）部位 ----------------
+  /* ---------------- 骨折／脫臼互動圖（Q 版骨頭人）：標示目前選擇的骨折（或脫臼）部位 ----------------
    * 位置資料在 rates.js 的 BONE_CHART／JOINT_CHART（百分比），圖片縮放時會自動對齊。
    * 只在部位／程度／ADH 金額改變時才重畫，避免輸入其他欄位時動畫一直重播。
    * 圖上有兩種模式：
@@ -341,13 +341,53 @@
         '<line class="chart-line-core" x1="' + l[0] + '" y1="' + l[1] + '" x2="' + l[2] + '" y2="' + l[3] + '"/>' +
         "</svg>";
     }
-    html += '<span class="chart-spot" style="left:' + b[0] + "%;top:" + b[1] + "%;width:" + b[2] + "%;height:" + b[3] + '%"></span>';
+    // 選取框改由標籤本身（.chart-pill.is-active）顯示，寬度與標籤完全一致
     if (l) html += '<span class="chart-dot" style="left:' + l[2] + "%;top:" + l[3] + '%"></span>';
-    html += '<span class="chart-bubble" style="left:' + (b[0] + b[2]) + "%;top:" + b[1] + '%">' +
+    var below = b[1] < 14; // 太靠近圖頂：氣泡改放在標籤下方
+    var leftCol = b[0] < 50; // 左欄（骨折）氣泡靠標籤左緣往右展開；右欄（脫臼）靠標籤右緣往左展開，長名稱也不會超出圖框
+    html += '<span class="chart-bubble' + (below ? " is-below" : "") + (leftCol ? " is-left" : "") + '" style="left:' + (leftCol ? b[0] : b[0] + b[2]) + "%;top:" + (below ? b[1] + b[3] : b[1]) + '%">' +
       '<span class="chart-bubble-name">' + esc(label) + "</span>" +
       "<b>" + pctHtml + "</b>" + (smallHtml || "") +
       '<em class="chart-bubble-pay">' + payHtml + "</em></span>";
     return html;
+  }
+
+  /* ---------------- 互動圖的固定圖層：部位標籤、引線、圓點 ----------------
+   * 名稱與比例全部取自 R.BONES（adh %）與 R.JOINTS（pct %），位置取自 R.BONE_CHART／R.JOINT_CHART；
+   * 骨頭人圖片本身沒有任何文字。只在初始化時產生一次。 */
+  // 標籤、引線、圓點一律為 DM 樣式的單一顏色（白底名稱＋綠色比例格），顏色在 style.css 的 .chart-stage 變數設定
+
+  function pillHtml(kind, id, label, pctText, pos) {
+    var b = pos.box, m = /^(.*?)（(.*)）$/.exec(label);
+    var name = m ? esc(m[1]) + "<small>(" + esc(m[2]) + ")</small>" : esc(label);
+    return '<span class="chart-pill is-' + kind + (m ? " has-sub" : "") + '" data-kind="' + kind + '" data-id="' + esc(id) + '" title="' + esc(label + " " + pctText) + '"' +
+      // 寬度至少為 box 寬；字太長（窄螢幕）時往圖中央延伸：骨折標籤往右、脫臼標籤往左
+      ' style="' + (kind === "joint" ? "right:" + Math.round((100 - b[0] - b[2]) * 100) / 100 : "left:" + b[0]) + "%;top:" + b[1] + "%;min-width:" + b[2] + "%;height:" + b[3] + '%">' +
+      '<span class="pill-name">' + name + '</span><b class="pill-pct">' + pctText + "</b></span>";
+  }
+
+  function buildChartLabels() {
+    var F = R.CHART_FIGURE, lines = "", dots = "", pills = "";
+    function add(kind, id, label, pctText, pos) {
+      if (!pos) return;
+      pills += pillHtml(kind, id, label, pctText, pos);
+      var l = pos.line;
+      if (!l) return;
+      lines += '<line x1="' + l[0] + '" y1="' + l[1] + '" x2="' + l[2] + '" y2="' + l[3] + '"/>';
+      dots += '<span class="chart-pin" style="left:' + l[2] + "%;top:" + l[3] + '%"></span>';
+    }
+    R.BONES.forEach(function (b, i) { add("bone", b.id, b.label, b.adh + "%", R.BONE_CHART[b.id]); });
+    R.JOINTS.forEach(function (j, i) { add("joint", j.id, j.label, j.pct + "%", R.JOINT_CHART[j.id]); });
+    var html = '<svg class="chart-leaders" viewBox="0 0 100 100" preserveAspectRatio="none">' + lines + "</svg>" + dots + pills;
+    var stages = document.querySelectorAll(".chart-stage");
+    for (var i = 0; i < stages.length; i++) {
+      var st = stages[i], layer = st.querySelector(".chart-labels"), img = st.querySelector("img");
+      if (F) {
+        st.style.aspectRatio = "100 / " + F.aspect;
+        if (img) img.style.cssText = "left:" + F.left + "%;top:" + F.top + "%;width:" + F.width + "%";
+      }
+      if (layer) layer.innerHTML = html;
+    }
   }
 
   function renderChart(c) {
@@ -370,6 +410,12 @@
           // 理賠金額＝報價卡「骨折」那一列的金額（ADH 骨折金＋2% 關懷金），不另外計算
           c.effectiveAdh > 0 ? "理賠 " + money.format(c.adhFracture + c.adhCare) + " 元" : "未投保 ADH");
       }
+    }
+    var activeKind = joint ? "joint" : "bone", activeId = joint ? joint.id : c.bone.id;
+    var pills = document.querySelectorAll(".chart-pill");
+    for (var k = 0; k < pills.length; k++) {
+      pills[k].classList.toggle("is-active", pills[k].getAttribute("data-kind") === activeKind && pills[k].getAttribute("data-id") === activeId);
+      pills[k].classList.toggle("is-joint-mode", !!joint);
     }
     var boxes = document.querySelectorAll(".chart-overlay");
     for (var i = 0; i < boxes.length; i++) {
@@ -622,6 +668,7 @@
     on("fractureType", "change", function (t) { state.fractureType = t.value; chartView.mode = "bone"; });
     on("hospitalDays", "input", function (t) { state.hospitalDaysInput = t.value; });
     on("hospitalDays", "blur", function () { state.hospitalDaysInput = String(compute(state).hospitalDays); });
+    buildChartLabels();
     render();
     initChartPicker();
     initCaseShare();

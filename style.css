@@ -1099,7 +1099,7 @@ select:focus {
 }
 
 /* =====================================================================
- * ADH 骨折別表圖卡片（右側報價卡下方）：依「骨折部位」標示；點圖上的部位可直接選取
+ * 骨折／脫臼互動圖卡片（右側報價卡下方）：依「骨折部位」標示；點圖上的部位可直接選取（骨頭人版面見檔案最後）
  * ===================================================================== */
 .chart-card {
   background: var(--paper);
@@ -1602,3 +1602,153 @@ select:focus {
 }
 .case-premium .case-prem-row{display:block;margin-top:2px}
 .case-premium small{display:block}
+
+/* =====================================================================
+ * Q 版骨頭人互動圖（取代 DM 圖片）：圖片只有骨頭人，標籤／引線／圓點由 app.js 依 rates.js 產生
+ * 舞台寬：高 = 100：130；字級用 cqw（舞台寬的 1%），整張圖一起縮放
+ * ===================================================================== */
+.chart-stage {
+  aspect-ratio: 100 / 130;
+  background:
+    radial-gradient(ellipse 34% 40% at 57% 50%, #eaf6ff 0%, #f6fbff 55%, #fff0 100%),
+    #fff;
+}
+.chart-stage > img {
+  position: absolute;
+  left: 32.8%;
+  top: 13.5%;
+  width: 49%;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.chart-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.chart-leaders {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.chart-leaders line {
+  stroke: var(--dm-line);
+  stroke-width: 1.3px;
+  stroke-linecap: round;
+  opacity: 0.8;
+  vector-effect: non-scaling-stroke;
+}
+/* DM 樣式單一顏色：白底名稱＋細框、綠色比例格（DM 右欄綠 #439494）；引線與圓點為深青灰 */
+.chart-stage {
+  --dm-green: #439494;
+  --dm-line: #4f7f86;
+  --dm-border: #7d9a9c;
+}
+.chart-pin {
+  position: absolute;
+  width: max(6px, 1.4cqw);
+  height: max(6px, 1.4cqw);
+  border-radius: 50%;
+  background: var(--dm-line);
+  border: max(1.5px, 0.3cqw) solid #fff;
+  box-shadow: 0 0 0 1px var(--dm-line);
+  transform: translate(-50%, -50%);
+}
+.chart-pill {
+  position: absolute;
+  width: max-content;
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  border-radius: 2px;
+  background: #fff;
+  border: 1px solid var(--dm-border);
+}
+.pill-name {
+  flex: 1 0 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 0.3em 0 0.6em;
+  color: #23292c;
+  font-size: max(8.5px, 2.45cqw);
+  font-weight: 700;
+  line-height: 1.08;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+.pill-name small {
+  color: #5d6468;
+  font-size: max(6.5px, 1.55cqw);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.pill-pct {
+  flex: 0 0 7.6cqw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: var(--dm-green);
+  font-family: var(--display-number);
+  font-size: max(9px, 2.6cqw);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+/* 選取中的標籤：變色（金黃底＋紅字、比例格轉紅）＋亮黃外框與光暈，其他區域稍微變暗；脫臼則比例格轉深綠 */
+.chart-pill.is-active {
+  z-index: 3;
+  background: #fff3c4;
+  border-color: var(--red);
+  outline: 3px solid #ffd23f;
+  outline-offset: 1px;
+  box-shadow: 0 0 0 9999px #0c1e2830, 0 0 14px 6px #ffbf00e6;
+  animation: chart-pulse 1.4s ease-in-out infinite;
+}
+.chart-pill.is-active .pill-name,
+.chart-pill.is-active .pill-name small { color: var(--red); font-weight: 900; }
+.chart-pill.is-active .pill-pct { background: var(--red); }
+.chart-pill.is-active.is-joint-mode { border-color: #0b4f4b; }
+.chart-pill.is-active.is-joint-mode .pill-pct { background: #0b4f4b; }
+@media (prefers-reduced-motion: reduce) {
+  .chart-pill.is-active { animation: none; }
+}
+/* 氣泡太靠近圖頂時放在標籤下方 */
+.chart-bubble.is-below {
+  transform: translate(-100%, 10px);
+}
+.chart-bubble.is-below::after {
+  bottom: auto;
+  top: -10px;
+  border: 8px solid transparent;
+  border-bottom-color: var(--red);
+  border-top: 0;
+}
+.chart-overlay.is-joint .chart-bubble.is-below::after {
+  border-bottom-color: var(--teal);
+  border-top-color: transparent;
+}
+/* 點按提示改放在圖下方，不蓋住底部標籤 */
+.chart-tap-hint {
+  position: static;
+  display: block;
+  max-width: none;
+  text-align: center;
+  border-top: 1px solid #cad7d5;
+}
+@media (width<=720px) {
+  .chart-card {
+    max-width: calc(100vw - 20px);
+    padding: 10px 8px;
+  }
+  .chart-tap-hint {
+    font-size: 12px;
+  }
+}
+.chart-bubble.is-left { transform: translate(0, calc(-100% - 10px)); }
+.chart-bubble.is-left.is-below { transform: translate(0, 10px); }
+.chart-bubble.is-left::after { right: auto; left: 0.5em; }
